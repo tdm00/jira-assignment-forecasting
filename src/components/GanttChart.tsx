@@ -29,7 +29,8 @@ export function buildTimeline(dates: IsoDate[], forecastStart: IsoDate, zoom: Zo
     lo = minDate(lo, d);
     hi = maxDate(hi, d);
   }
-  lo = addDays(lo, -7);
+  // Old history (for example long-finished Done items) should not push the forecast off screen.
+  lo = maxDate(addDays(lo, -7), addDays(forecastStart, -14));
   lo = addDays(lo, -((dayOfWeek(lo) + 6) % 7));
   hi = addDays(hi, 14);
   let days = diffDays(lo, hi) + 1;

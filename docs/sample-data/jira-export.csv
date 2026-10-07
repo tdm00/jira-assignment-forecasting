@@ -6,11 +6,11 @@ Mobile push notification service,PLAT-104,Story,To Do,Nova,David Okafor,3,4,,202
 Fraud scoring model hosting,PLAT-105,Story,To Do,Phoenix,Alice Chen,13,15,,2026-11-20,0|i00050:
 Data retention policy engine,PLAT-106,Story,To Do,Atlas,Erin Walsh,5,5,,2026-10-30,0|i00060:
 Account statements PDF rendering,PLAT-107,Story,Done,Orion,Carla Singh,3,3,2026-09-21,2026-09-24,0|i00070:
-Event streaming platform upgrade,PLAT-108,Story,To Do,Nova,Bob Martinez,8,10,,2026-11-13,0|i00080:
+Event streaming platform upgrade,PLAT-108,Story,To Do,Nova,Bob Martinez,8,10,,2026-10-23,0|i00080:
 Card controls self-service,PLAT-109,Story,To Do,Phoenix,,5,5,,2026-11-27,0|i00090:
 Open banking consent API,PLAT-110,Story,Backlog,Atlas,David Okafor,8,8,,2026-11-30,0|i000a0:
 Observability dashboards for core services,PLAT-111,Story,To Do,Orion,Erin Walsh,3,3,,2026-11-10,0|i000b0:
-Loan origination workflow,PLAT-112,Story,To Do,Nova,Alice Chen,13,12,,2026-12-18,0|i000c0:
+Loan origination workflow,PLAT-112,Story,To Do,Nova,Alice Chen,13,12,,2026-11-20,0|i000c0:
 Secrets management migration,PLAT-113,Story,To Do,Phoenix,Carla Singh,5,,,2026-11-25,0|i000d0:
 Branch locator search,PLAT-114,Story,Backlog,Atlas,,2,2,,,0|i000e0:
 Wire transfer limits configuration,PLAT-115,Story,To Do,Orion,Bob Martinez,3,4,,2026-12-04,0|i000f0:

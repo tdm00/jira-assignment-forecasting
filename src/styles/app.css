@@ -932,15 +932,15 @@ select {
 }
 
 .col-summary {
-  width: 260px;
-  min-width: 260px;
-  max-width: 260px;
+  width: 240px;
+  min-width: 240px;
+  max-width: 240px;
 }
 
 .is-compact .col-summary {
-  width: 220px;
-  min-width: 220px;
-  max-width: 220px;
+  width: 210px;
+  min-width: 210px;
+  max-width: 210px;
 }
 
 .col-crew {
@@ -948,8 +948,8 @@ select {
 }
 
 .col-arch {
-  width: 170px;
-  min-width: 170px;
+  width: 160px;
+  min-width: 160px;
 }
 
 .col-status {
@@ -1185,6 +1185,7 @@ select {
 .gantt-cell {
   position: relative;
   height: calc(var(--row-h) - 1px);
+  overflow: hidden;
 }
 
 .gantt-closure {

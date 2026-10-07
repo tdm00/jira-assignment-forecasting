@@ -75,7 +75,6 @@ export function HolidayPanel({ state, dispatch }: Props) {
               className="input"
               type="date"
               value={end}
-              min={start || undefined}
               onChange={(e) => setEnd(e.target.value)}
               aria-label="Closure end"
             />

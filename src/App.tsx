@@ -54,7 +54,7 @@ export default function App({ initial, storage = safeStorage() }: Props) {
   );
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [zoom, setZoom] = useState<Zoom>('week');
-  const [compact, setCompact] = useState(false);
+  const [compact, setCompact] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [theme, setTheme] = useState<Theme>(() => initialTheme(storage));
   const [toasts, setToasts] = useState<Toast[]>([]);
