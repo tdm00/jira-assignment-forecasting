@@ -18,11 +18,11 @@ flowchart LR
 
 ## Requirements
 
-| ID         | Priority | Description                            | Acceptance criteria                                                                         |
-| ---------- | -------- | -------------------------------------- | ------------------------------------------------------------------------------------------- |
-| REQ-CI-001 | Must     | CI runs on push and pull request.      | The workflow triggers on `push` and `pull_request`.                                         |
-| REQ-CI-002 | Must     | CI runs lint, typecheck and all tests. | Any failure fails the workflow.                                                             |
-| REQ-CI-003 | Must     | CI builds the single file.             | `dist/index.html` is built and uploaded as the `jira-gantt-forecaster` artifact.            |
-| REQ-CI-004 | Should   | Test reports are kept on failure.      | The Playwright HTML report is uploaded when e2e tests fail.                                 |
-| REQ-CI-005 | Could    | Releases include the file.             | Pushing a `v*` tag attaches `index.html` to a GitHub Release.                               |
-| REQ-CI-006 | Should   | Builds are reproducible.               | Dependencies are installed from `package-lock.json` with `npm ci` on a pinned Node version. |
+| ID         | Priority | Description                            | Acceptance criteria                                                                                       |
+| ---------- | -------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| REQ-CI-001 | Must     | CI runs on push and pull request.      | The workflow triggers on `push` and `pull_request`.                                                       |
+| REQ-CI-002 | Must     | CI runs lint, typecheck and all tests. | Any failure fails the workflow.                                                                           |
+| REQ-CI-003 | Must     | CI builds the single file.             | `dist/index.html` is built and uploaded as the `jira-gantt-forecaster` artifact.                          |
+| REQ-CI-004 | Should   | Test reports are kept on failure.      | The Playwright HTML report is uploaded when e2e tests fail.                                               |
+| REQ-CI-005 | Could    | Releases include the file.             | Pushing a `v*` tag attaches `index.html` to a GitHub Release.                                             |
+| REQ-CI-006 | Should   | Builds are reproducible.               | Dependencies are installed from `package-lock.json` with `npm ci` on the Node version pinned in `.nvmrc`. |
