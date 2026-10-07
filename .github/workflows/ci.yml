@@ -52,7 +52,7 @@ jobs:
         run: npm run test:e2e
 
       - name: Upload app artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: jira-gantt-forecaster
           path: dist/index.html
@@ -60,7 +60,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage/
@@ -68,7 +68,7 @@ jobs:
 
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: |
@@ -84,7 +84,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: jira-gantt-forecaster
       - name: Create GitHub release
