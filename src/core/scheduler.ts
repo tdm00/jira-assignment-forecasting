@@ -75,6 +75,8 @@ export interface ScheduleInput {
    * scheduled on their own calendar.
    */
   scope?: ScheduleScope;
+  /** Earliest start per item key; used to keep pool `availableFrom` dates when scoping. */
+  notBefore?: Record<string, IsoDate>;
 }
 
 /** Normalized crew name. Items without a crew use the empty string. */
@@ -127,6 +129,7 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
     staff: StaffMember;
     role?: PoolRole;
     start: IsoDate;
+    floor?: IsoDate;
   }
 
   const earliestOf = (cands: Candidate[]): Candidate | null =>
@@ -152,6 +155,7 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
     role?: PoolRole;
     suggested: boolean;
     extraFlags: FlagCode[];
+    floor?: IsoDate;
   }
 
   const choose = (item: JiraItem, isInProgress: boolean, base: IsoDate): Choice => {
@@ -184,6 +188,7 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
           const cands = pool.map(({ staff: member, assignment }) => ({
             staff: member,
             role: assignment.role,
+            ...(assignment.availableFrom ? { floor: assignment.availableFrom } : {}),
             start: earliestStart(
               member.id,
               member.id,
@@ -197,6 +202,7 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
             role: chosen.role,
             suggested: false,
             extraFlags: [],
+            ...(chosen.floor ? { floor: chosen.floor } : {}),
           };
         }
         if (jira.kind === 'auto') return auto(['no-crew-pool']);
@@ -242,8 +248,15 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
 
   const place = (item: JiraItem, isInProgress: boolean) => {
     const days = estimateDays(item, settings.daysPerPoint);
-    const base = isInProgress ? (item.startDate ?? forecastStart) : forecastStart;
-    const { resolved, via, role, suggested, extraFlags } = choose(item, isInProgress, base);
+    const itemFloor = input.notBefore?.[item.key];
+    const base = isInProgress
+      ? (item.startDate ?? forecastStart)
+      : itemFloor
+        ? maxDate(forecastStart, itemFloor)
+        : forecastStart;
+    const choice = choose(item, isInProgress, base);
+    const { resolved, via, role, suggested, extraFlags } = choice;
+    const placeBase = choice.floor ? maxDate(base, choice.floor) : base;
     const flags: FlagCode[] = [...extraFlags];
     if (resolved.kind === 'unknown') flags.push('unknown-architect');
     if (resolved.kind === 'none') flags.push('no-architect');
@@ -266,7 +279,7 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
     }
 
     const key = capKey(resolved);
-    const start = earliestStart(key, staffId, base);
+    const start = earliestStart(key, staffId, placeBase);
     let end = cal.addWorkingDays(start, days, staffId);
     if (isInProgress && end < forecastStart) end = cal.nextWorkingDay(forecastStart, staffId);
     free.set(key, maxDate(forecastStart, addDays(end, 1)));
@@ -297,7 +310,16 @@ function scheduleScoped(input: ScheduleInput, scope: ScheduleScope): Map<string,
     (i) => full.get(i.key)?.staffId === scope.staffId && crews.has(crewKey(i.crew)),
   );
   const forced = mine.map((i) => ({ ...i, architectOverride: scope.staffId }));
-  const scoped = schedule({ ...rest, items: forced });
+  const notBefore: Record<string, IsoDate> = { ...input.notBefore };
+  for (const i of mine) {
+    const via = full.get(i.key)?.assignedVia;
+    if (via !== 'primary' && via !== 'backup') continue;
+    const from = poolFor(i.crew, input.crewAssignments ?? [], input.staff).find(
+      (p) => p.staff.id === scope.staffId,
+    )?.assignment.availableFrom;
+    if (from) notBefore[i.key] = from;
+  }
+  const scoped = schedule({ ...rest, items: forced, notBefore });
   for (const [key, s] of scoped) {
     const f = full.get(key)!;
     const poolFlag: FlagCode[] = f.flags.includes('no-crew-pool') ? ['no-crew-pool'] : [];
