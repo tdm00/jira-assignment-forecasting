@@ -1,5 +1,5 @@
 import { useMemo, type Dispatch } from 'react';
-import { distinctSorted } from '../core/filters';
+import { distinctSorted, sortStaffByName } from '../core/filters';
 import { crewKey } from '../core/scheduler';
 import type { CrewAssignment, PoolRole } from '../core/types';
 import type { Action, AppState } from '../state/store';
@@ -32,6 +32,7 @@ export function listCrews(state: AppState): string[] {
 export function CrewPanel({ state, dispatch }: Props) {
   const { staff, crewAssignments, settings } = state;
   const crews = useMemo(() => listCrews(state), [state]);
+  const sortedStaff = useMemo(() => sortStaffByName(staff), [staff]);
   const slot = (crew: string, role: PoolRole): CrewAssignment | undefined =>
     crewAssignments.find((a) => crewKey(a.crew) === crewKey(crew) && a.role === role);
 
@@ -93,7 +94,7 @@ export function CrewPanel({ state, dispatch }: Props) {
                     }
                   >
                     <option value="">None</option>
-                    {staff.map((s) => (
+                    {sortedStaff.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}
                       </option>

@@ -1,5 +1,5 @@
 import { UNASSIGNED } from './scheduler';
-import type { Filters, JiraItem, ScheduledItem } from './types';
+import type { Filters, JiraItem, ScheduledItem, StaffMember } from './types';
 
 export const NO_CREW = '(No crew)';
 
@@ -33,6 +33,13 @@ export function applyFilters(
     if (crews.size && !crews.has(crewOf(item))) return false;
     return true;
   });
+}
+
+/** Staff ordered by name for dropdowns. The stored staff order (used for tie-breaks) is untouched. */
+export function sortStaffByName(staff: readonly StaffMember[]): StaffMember[] {
+  return [...staff].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }),
+  );
 }
 
 export function distinctSorted(values: Iterable<string>): string[] {

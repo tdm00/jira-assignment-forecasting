@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  sortStaffByName,
   NO_CREW,
   applyFilters,
   architectOf,
@@ -37,6 +38,18 @@ describe('rank helpers', () => {
     expect(keys(moveWithinVisible(all, ['a', 'c', 'd'], 'c', -1))).toEqual(['c', 'a', 'b', 'd']);
     expect(keys(moveWithinVisible(all, ['a', 'c', 'd'], 'c', 1))).toEqual(['a', 'b', 'd', 'c']);
     expect(moveWithinVisible(all, ['a', 'c'], 'a', -1)).toBe(all);
+  });
+});
+
+describe('sortStaffByName (REQ-STF-010)', () => {
+  it('sorts case-insensitively without mutating the stored order', () => {
+    const staff = [
+      { id: '1', name: 'Zed' },
+      { id: '2', name: 'alice' },
+      { id: '3', name: 'Bob' },
+    ];
+    expect(sortStaffByName(staff).map((s) => s.name)).toEqual(['alice', 'Bob', 'Zed']);
+    expect(staff.map((s) => s.name)).toEqual(['Zed', 'alice', 'Bob']);
   });
 });
 
