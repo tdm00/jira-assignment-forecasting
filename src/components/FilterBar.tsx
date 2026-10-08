@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { isFiltered } from '../core/filters';
 import type { Filters } from '../core/types';
 import { MultiSelect } from './MultiSelect';
@@ -18,12 +19,15 @@ interface Props {
   compact: boolean;
   onCompact: (v: boolean) => void;
   onResetOrder: () => void;
+  leftSlot?: ReactNode;
+  showArchitects?: boolean;
 }
 
 export function FilterBar(p: Props) {
   const { filters, onChange } = p;
   return (
     <div className="filterbar" role="search">
+      {p.leftSlot}
       <div className="search">
         <SearchIcon className="search__icon" />
         <input
@@ -35,13 +39,15 @@ export function FilterBar(p: Props) {
           onChange={(e) => onChange({ ...filters, search: e.target.value })}
         />
       </div>
-      <MultiSelect
-        label="Architects"
-        options={p.architects}
-        selected={filters.architects}
-        onChange={(architects) => onChange({ ...filters, architects })}
-        colorFor={p.colorFor}
-      />
+      {p.showArchitects !== false && (
+        <MultiSelect
+          label="Architects"
+          options={p.architects}
+          selected={filters.architects}
+          onChange={(architects) => onChange({ ...filters, architects })}
+          colorFor={p.colorFor}
+        />
+      )}
       <MultiSelect
         label="Crews"
         options={p.crews}

@@ -32,3 +32,6 @@ export const CLOSURE_NAME_COLUMNS = [
   'title',
 ];
 export const NOTE_COLUMNS = ['note', 'notes', 'reason', 'description', 'comment'];
+export const CREW_COLUMNS = ['crew', 'crew name', 'team', 'squad'];
+export const ROLE_COLUMNS = ['role', 'priority', 'order', 'level', 'pool role'];
+export const AVAILABLE_FROM_COLUMNS = ['available from', 'from', 'start date', 'start'];
