@@ -32,14 +32,42 @@ function memoryStorage(): Storage {
 }
 
 const withStaff = (s: AppState = testState()) =>
-  reducer(s, { type: 'addStaff', names: ['Alice Chen', 'Bob Martinez'] });
+  reducer(s, {
+    type: 'addStaff',
+    people: [{ name: 'Alice Chen' }, { name: 'Bob Martinez' }],
+  });
 
 describe('reducer', () => {
   it('adds unique, trimmed staff names (REQ-STF-002, REQ-STF-004)', () => {
     let s = withStaff();
-    s = reducer(s, { type: 'addStaff', names: ['  alice   CHEN ', '', 'Carla'] });
+    s = reducer(s, {
+      type: 'addStaff',
+      people: [{ name: '  alice   CHEN ' }, { name: '' }, { name: 'Carla' }],
+    });
     expect(s.staff.map((x) => x.name)).toEqual(['Alice Chen', 'Bob Martinez', 'Carla']);
-    expect(reducer(s, { type: 'addStaff', names: ['carla'] })).toBe(s);
+    expect(s.staff.every((x) => x.employeeId === '')).toBe(true);
+    expect(reducer(s, { type: 'addStaff', people: [{ name: 'carla' }] })).toBe(s);
+  });
+
+  it('rejects a duplicate employee id (REQ-STF-004)', () => {
+    let s = reducer(testState(), {
+      type: 'addStaff',
+      people: [{ name: 'Alice Chen', employeeId: 'E1' }],
+    });
+    s = reducer(s, {
+      type: 'addStaff',
+      people: [
+        { name: 'Alicia', employeeId: ' e1 ' },
+        { name: 'Bob', employeeId: '' },
+        { name: 'Cara', employeeId: 'A-1' },
+      ],
+    });
+    expect(s.staff.map((x) => [x.name, x.employeeId])).toEqual([
+      ['Alice Chen', 'E1'],
+      ['Bob', ''],
+      ['Cara', 'A-1'],
+    ]);
+    expect(reducer(s, { type: 'addStaff', people: [{ name: 'Dan', employeeId: 'E1' }] })).toBe(s);
   });
 
   it('removing staff removes their vacations and overrides (REQ-STF-005)', () => {
@@ -173,8 +201,19 @@ describe('persistence (REQ-PER-001..008)', () => {
   });
 
   it('fills defaults for older data', () => {
-    const s = coerceState({ staff: [], vacations: [], closures: [], items: [{ key: 'a' }] });
-    expect(s.items[0]).toMatchObject({ architectOverride: null, fileIndex: 0 });
+    const s = coerceState({
+      staff: [{ id: 's', name: 'Ada' }],
+      vacations: [],
+      closures: [],
+      items: [{ key: 'a' }],
+    });
+    expect(s.staff[0]).toMatchObject({ name: 'Ada', employeeId: '' });
+    expect(s.items[0]).toMatchObject({
+      assignee: '',
+      dueDate: null,
+      architectOverride: null,
+      fileIndex: 0,
+    });
     expect(s.settings.daysPerPoint).toBe(1);
     expect(s.jiraFileName).toBeNull();
   });
@@ -186,13 +225,25 @@ describe('persistence (REQ-PER-001..008)', () => {
   it('exports the plan as CSV in plan order (REQ-PER-005)', () => {
     const s = withStaff();
     const items = [
-      item({ key: 'B', architect: 'Bob Martinez', slaDays: 2 }),
+      item({
+        key: 'B',
+        architect: 'Bob Martinez',
+        assignee: 'B-9',
+        slaDays: 2,
+        endDate: '2026-12-01',
+        dueDate: '2026-12-15',
+      }),
       item({ key: 'U', architect: '', slaDays: 1, storyPoints: 3 }),
     ];
     const sched = schedule({ ...s, items });
     const rows = parseCsv(exportPlanCsv(items, sched));
     expect(rows[0]).toContain('Forecast Start');
+    expect(rows[0]).toEqual(expect.arrayContaining(['Assignee', 'Target end', 'Due date']));
     expect(rows[1]!.slice(0, 2)).toEqual(['1', 'B']);
+    const header = rows[0]!;
+    expect(rows[1]![header.indexOf('Assignee')]).toBe('B-9');
+    expect(rows[1]![header.indexOf('Target end')]).toBe('2026-12-01');
+    expect(rows[1]![header.indexOf('Due date')]).toBe('2026-12-15');
     expect(rows[2]).toContain('yes');
     expect(rows[2]).toContain('Alice Chen');
   });
@@ -278,7 +329,7 @@ describe('crew pool state (REQ-POOL-001, REQ-POOL-002, REQ-POOL-011..013)', () =
   const base = () => {
     let s = reducer(testState(), {
       type: 'addStaff',
-      names: ['Alice Chen', 'Bob Martinez', 'Carla Singh'],
+      people: [{ name: 'Alice Chen' }, { name: 'Bob Martinez' }, { name: 'Carla Singh' }],
     });
     s = reducer(s, {
       type: 'setItems',
@@ -333,6 +384,28 @@ describe('crew pool state (REQ-POOL-001, REQ-POOL-002, REQ-POOL-011..013)', () =
     expect(s.crewAssignments[0]).not.toHaveProperty('availableFrom');
     const untouched = reducer(s, { type: 'toggleCrewAssignment', crew: 'Other', staffId: alice });
     expect(untouched.crewAssignments).toEqual(s.crewAssignments);
+  });
+
+  it('seeds a crew primary from an assignee id that matches a staff employee id', () => {
+    let s = reducer(testState(), {
+      type: 'addStaff',
+      people: [
+        { name: 'Alice Chen', employeeId: 'EA' },
+        { name: 'Bob Martinez', employeeId: 'EB' },
+      ],
+    });
+    s = reducer(s, {
+      type: 'setItems',
+      fileName: 'j.csv',
+      items: [
+        item({ key: 'A', crew: 'Phoenix', assignee: 'ea', architect: 'Someone' }),
+        item({ key: 'B', crew: 'Phoenix', assignee: 'EA', architect: '' }),
+      ],
+    });
+    s = reducer(s, { type: 'seedCrewPools' });
+    expect(s.crewAssignments).toMatchObject([
+      { crew: 'Phoenix', staffId: s.staff[0]!.id, role: 1 },
+    ]);
   });
 
   it('seeds each crew primary with its most frequent Jira architect and keeps existing primaries', () => {

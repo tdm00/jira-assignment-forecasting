@@ -47,7 +47,7 @@ export function SummaryStats({ summary, staff, compare, baseline, changes }: Pro
       testId: 'stat-points',
     },
     {
-      label: 'Late vs Jira end',
+      label: 'Late vs due date',
       value: String(summary.lateCount),
       tone: summary.lateCount ? 'danger' : 'ok',
       testId: 'stat-late',

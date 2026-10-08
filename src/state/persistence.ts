@@ -25,12 +25,17 @@ export function coerceState(raw: unknown): AppState {
   }
   const settings = isObject(raw.settings) ? raw.settings : {};
   return {
-    staff: raw.staff as AppState['staff'],
+    staff: (raw.staff as AppState['staff']).map((s) => ({
+      ...s,
+      employeeId: s.employeeId ?? '',
+    })),
     vacations: raw.vacations as AppState['vacations'],
     closures: raw.closures as AppState['closures'],
     items: (raw.items as JiraItem[]).map((i, idx) => ({
       ...i,
+      assignee: i.assignee ?? '',
       architectOverride: i.architectOverride ?? null,
+      dueDate: i.dueDate ?? null,
       fileIndex: i.fileIndex ?? idx,
     })),
     settings: { ...defaultSettings(), ...(settings as Partial<AppState['settings']>) },
@@ -112,6 +117,7 @@ export function exportPlanCsv(items: JiraItem[], scheduled: Map<string, Schedule
       'Issue key': item.key,
       Summary: item.summary,
       Crew: item.crew,
+      Assignee: item.assignee,
       Architect: item.architect,
       'Forecast Architect': s?.architect ?? '',
       Suggested: s?.suggested ? 'yes' : '',
@@ -120,7 +126,8 @@ export function exportPlanCsv(items: JiraItem[], scheduled: Map<string, Schedule
       'Story Points': item.storyPoints ?? '',
       'SLA Days': item.slaDays ?? '',
       'Start date': item.startDate ?? '',
-      'Due date': item.endDate ?? '',
+      'Target end': item.endDate ?? '',
+      'Due date': item.dueDate ?? '',
       'Forecast Start': s?.start ?? '',
       'Forecast End': s?.end ?? '',
       'Working Days': s?.workingDays ?? '',

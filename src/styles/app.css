@@ -402,6 +402,20 @@ select {
   gap: 8px;
 }
 
+.inline-form .input {
+  width: auto;
+  min-width: 0;
+  flex: 1;
+}
+
+.inline-form .input--id {
+  flex: 0.7;
+}
+
+.inline-form > .btn {
+  flex-shrink: 0;
+}
+
 .stack-form {
   display: flex;
   flex-direction: column;

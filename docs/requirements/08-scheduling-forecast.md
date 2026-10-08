@@ -17,8 +17,10 @@
    scheduled before the others for their architect, starting on their Jira
    start date if present (otherwise the forecast start date). Their end date is
    never earlier than the forecast start date.
-7. **Done items.** Items whose status is a done status use their Jira dates for
-   display and consume no capacity.
+7. **Done items.** Items whose status is a done status use their recorded dates
+   for display and consume no capacity. The bar runs from target start through
+   target end (`start = start date ?? target end ?? due date`,
+   `end = target end ?? due date ?? start date`).
 8. **Next available architect.** When an item has no architect (or is set to
    Auto) and auto-assign is on, it is given to the staff member who can start
    it the earliest. Ties go to the earlier staff member in the list. The
@@ -28,7 +30,7 @@
 10. **Crew pools (optional).** In `Crew pools` assignment mode the crew's pool
     chooses the architect instead of the Jira field. See
     [14 - Crew pools](14-crew-pools-and-scenarios.md).
-11. **Late items.** An item is late when its forecast end is after its Jira end date.
+11. **Late items.** An item is late when its forecast end is after its due date.
 
 ## Example
 

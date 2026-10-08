@@ -3,13 +3,17 @@ export const JIRA_COLUMNS = {
   summary: ['summary', 'task summary'],
   crew: ['crew', 'crew assigned', 'team', 'squad'],
   architect: ['architect', 'architect assigned', 'solution architect'],
-  status: ['status'],
+  assignee: ['assignee'],
+  status: ['status type', 'status'],
   storyPoints: ['story points', 'story point', 'story point estimate', 'points', 'sp'],
   slaDays: ['sla', 'sla days', 'sla days to complete', 'sla of days to complete'],
   startDate: ['start date', 'start', 'target start'],
-  endDate: ['end date', 'end', 'due date', 'due', 'target end'],
+  endDate: ['target end', 'end date', 'end'],
+  dueDate: ['due date', 'due'],
   rank: ['rank'],
 } as const satisfies Record<string, readonly string[]>;
+
+export const EMPLOYEE_ID_COLUMNS = ['employee id', 'employee identifier', 'assignee id'];
 
 export const PERSON_COLUMNS = [
   'staff',

@@ -1,7 +1,7 @@
 import { todayIso } from '../core/calendar';
 import { moveItem, moveWithinVisible, sortByRank } from '../core/rank';
 import type { Baseline } from '../core/compare';
-import { crewKey, normalizeName } from '../core/scheduler';
+import { crewKey, normalizeEmployeeId, normalizeName, resolveArchitect } from '../core/scheduler';
 import type {
   Closure,
   CrewAssignment,
@@ -27,7 +27,7 @@ export interface AppState {
 export type ItemPatch = Partial<Pick<JiraItem, 'storyPoints' | 'slaDays' | 'architectOverride'>>;
 
 export type Action =
-  | { type: 'addStaff'; names: string[] }
+  | { type: 'addStaff'; people: { name: string; employeeId?: string }[] }
   | { type: 'removeStaff'; id: string }
   | { type: 'addVacations'; vacations: Omit<Vacation, 'id'>[] }
   | { type: 'removeVacation'; id: string }
@@ -101,12 +101,12 @@ export function assignSlot(
 
 /** Each crew's most frequent Jira architect (that is in the staff list) becomes its primary. */
 export function seedPools(state: AppState): CrewAssignment[] {
-  const byName = new Map(state.staff.map((s) => [normalizeName(s.name), s] as const));
   const order = new Map(state.staff.map((s, i) => [s.id, i] as const));
   const counts = new Map<string, { name: string; perStaff: Map<string, number> }>();
   for (const item of state.items) {
     const key = crewKey(item.crew);
-    const member = byName.get(normalizeName(item.architect));
+    const resolved = resolveArchitect({ ...item, architectOverride: null }, state.staff, false);
+    const member = resolved.kind === 'staff' ? resolved.staff : undefined;
     if (!key || !member) continue;
     const row = counts.get(key) ?? { name: item.crew.trim(), perStaff: new Map() };
     row.perStaff.set(member.id, (row.perStaff.get(member.id) ?? 0) + 1);
@@ -126,14 +126,23 @@ export function seedPools(state: AppState): CrewAssignment[] {
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'addStaff': {
-      const known = new Set(state.staff.map((s) => normalizeName(s.name)));
+      const knownNames = new Set(state.staff.map((s) => normalizeName(s.name)));
+      const knownIds = new Set(
+        state.staff.flatMap((s) => {
+          const id = normalizeEmployeeId(s.employeeId);
+          return id ? [id] : [];
+        }),
+      );
       const added: StaffMember[] = [];
-      for (const raw of action.names) {
-        const name = raw.replace(/\s+/g, ' ').trim();
-        const key = normalizeName(name);
-        if (!name || known.has(key)) continue;
-        known.add(key);
-        added.push({ id: makeId('staff'), name });
+      for (const raw of action.people) {
+        const name = raw.name.replace(/\s+/g, ' ').trim();
+        const employeeId = (raw.employeeId ?? '').trim();
+        const nameKey = normalizeName(name);
+        const idKey = normalizeEmployeeId(employeeId);
+        if (!name || knownNames.has(nameKey) || (idKey && knownIds.has(idKey))) continue;
+        knownNames.add(nameKey);
+        if (idKey) knownIds.add(idKey);
+        added.push({ id: makeId('staff'), name, employeeId });
       }
       return added.length ? { ...state, staff: [...state.staff, ...added] } : state;
     }

@@ -20,6 +20,11 @@ export function normalizeName(name: string): string {
   return name.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+/** Trimmed, case-insensitive employee or assignee id. */
+export function normalizeEmployeeId(id: string): string {
+  return id.trim().toLowerCase();
+}
+
 function statusIn(status: string, list: string[]): boolean {
   const s = normalizeName(status);
   return list.some((x) => normalizeName(x) === s);
@@ -49,11 +54,67 @@ export function resolveArchitect(
     const s = staff.find((x) => x.id === item.architectOverride);
     if (s) return { kind: 'staff', staff: s };
   }
+  const assignee = item.assignee.trim();
+  const assigneeKey = normalizeEmployeeId(assignee);
+  if (assigneeKey) {
+    const byId = staff.find((x) => normalizeEmployeeId(x.employeeId) === assigneeKey);
+    if (byId) return { kind: 'staff', staff: byId };
+  }
   const name = item.architect.trim();
-  if (!name) return autoAssign ? { kind: 'auto' } : { kind: 'none' };
-  const key = normalizeName(name);
-  const s = staff.find((x) => normalizeName(x.name) === key);
-  return s ? { kind: 'staff', staff: s } : { kind: 'unknown', name };
+  if (name) {
+    const key = normalizeName(name);
+    const byName = staff.find((x) => normalizeName(x.name) === key);
+    if (byName) return { kind: 'staff', staff: byName };
+  }
+  const display = assignee || name;
+  if (!display) return autoAssign ? { kind: 'auto' } : { kind: 'none' };
+  return { kind: 'unknown', name: display };
+}
+
+/**
+ * Staff to offer from Jira. A row with an unmatched assignee id and an architect
+ * name becomes one person. When that name is already taken, the employee id is
+ * used as the display name so the id is kept.
+ */
+export function peopleMissingFromJira(
+  items: JiraItem[],
+  staff: StaffMember[],
+): { name: string; employeeId: string }[] {
+  const knownNames = new Set(staff.map((s) => normalizeName(s.name)));
+  const knownIds = new Set(
+    staff.flatMap((s) => {
+      const id = normalizeEmployeeId(s.employeeId);
+      return id ? [id] : [];
+    }),
+  );
+  const offers: { name: string; employeeId: string }[] = [];
+  const remember = (name: string, employeeId: string) => {
+    knownNames.add(normalizeName(name));
+    const id = normalizeEmployeeId(employeeId);
+    if (id) knownIds.add(id);
+    offers.push({ name, employeeId });
+  };
+
+  for (const item of items) {
+    const rawName = item.architect.replace(/\s+/g, ' ').trim();
+    const rawId = item.assignee.trim();
+    const nameKey = normalizeName(rawName);
+    const idKey = normalizeEmployeeId(rawId);
+    if (!rawName && !rawId) continue;
+    if (idKey && knownIds.has(idKey)) continue;
+
+    if (rawName && rawId) {
+      if (!knownNames.has(nameKey)) remember(rawName, rawId);
+      else if (!knownNames.has(idKey)) remember(rawId, rawId);
+      continue;
+    }
+    if (rawName && !knownNames.has(nameKey)) {
+      remember(rawName, '');
+      continue;
+    }
+    if (rawId && !knownNames.has(idKey)) remember(rawId, rawId);
+  }
+  return offers;
 }
 
 export interface ScheduleScope {
@@ -224,8 +285,8 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
   for (const item of items) {
     const resolved = resolveArchitect(item, staff, settings.autoAssign);
     if (statusIn(item.status, settings.doneStatuses)) {
-      const start = item.startDate ?? item.endDate;
-      const end = item.endDate ?? item.startDate;
+      const start = item.startDate ?? item.endDate ?? item.dueDate;
+      const end = item.endDate ?? item.dueDate ?? item.startDate;
       const staffId = resolved.kind === 'staff' ? resolved.staff.id : null;
       result.set(item.key, {
         key: item.key,
@@ -284,7 +345,7 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
     if (isInProgress && end < forecastStart) end = cal.nextWorkingDay(forecastStart, staffId);
     free.set(key, maxDate(forecastStart, addDays(end, 1)));
 
-    if (item.endDate && end > item.endDate) flags.push('late');
+    if (item.dueDate && end > item.dueDate) flags.push('late');
 
     result.set(item.key, {
       ...common,

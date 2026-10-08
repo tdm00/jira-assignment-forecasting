@@ -447,7 +447,7 @@ function GanttLegend() {
         <span className="swatch swatch--suggested" /> Suggested architect
       </li>
       <li>
-        <span className="swatch swatch--late" /> Late vs Jira end
+        <span className="swatch swatch--late" /> Late vs due date
       </li>
       <li>
         <span className="swatch swatch--closure" /> Closure / weekend
@@ -456,7 +456,7 @@ function GanttLegend() {
         <span className="swatch swatch--vacation" /> Vacation
       </li>
       <li>
-        <span className="swatch swatch--due" /> Jira end date
+        <span className="swatch swatch--due" /> Due date
       </li>
       <li>
         <span className="swatch swatch--ghost" /> Comparison forecast

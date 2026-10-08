@@ -4,6 +4,8 @@ export type IsoDate = string;
 export interface StaffMember {
   id: string;
   name: string;
+  /** Employee or assignee id. An empty string means the person has no id. */
+  employeeId: string;
 }
 
 export interface Vacation {
@@ -27,13 +29,17 @@ export interface JiraItem {
   crew: string;
   /** Architect name as provided by Jira. */
   architect: string;
+  /** Raw Assignee value from Jira (usually an employee id). */
+  assignee: string;
   /** Staff id chosen in the grid. `null` = use the Jira value, `AUTO_ASSIGN` = next available. */
   architectOverride: string | null;
   status: string;
   storyPoints: number | null;
   slaDays: number | null;
   startDate: IsoDate | null;
+  /** Target end from Jira. Distinct from the due date. */
   endDate: IsoDate | null;
+  dueDate: IsoDate | null;
   rank: string;
   /** Position in the original file, used as a rank tie-breaker. */
   fileIndex: number;

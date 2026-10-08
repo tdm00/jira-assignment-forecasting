@@ -6,8 +6,8 @@ import type { AppState } from '../../src/state/store';
 import { item, testState } from '../helpers';
 
 const staff = [
-  { id: 'alice', name: 'Alice Chen' },
-  { id: 'bob', name: 'Bob Martinez' },
+  { id: 'alice', name: 'Alice Chen', employeeId: '' },
+  { id: 'bob', name: 'Bob Martinez', employeeId: '' },
 ];
 
 function scenario(patch: Partial<AppState> = {}): AppState {
