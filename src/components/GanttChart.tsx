@@ -192,7 +192,7 @@ function tooltip(item: JiraItem, s: ScheduledItem): string {
     `Forecast: ${formatMedium(s.start)} - ${formatMedium(s.end)}`,
     `Working days: ${s.workingDays}`,
   ];
-  if (item.endDate) lines.push(`Jira due: ${formatMedium(item.endDate)}`);
+  if (item.dueDate) lines.push(`Due: ${formatMedium(item.dueDate)}`);
   return lines.join('\n');
 }
 
@@ -260,11 +260,12 @@ export const GanttCell = memo(function GanttCell({
           data-testid={`ghost-${item.key}`}
         />
       )}
-      {item.endDate && item.endDate >= t.start && item.endDate <= t.end && (
+      {item.dueDate && item.dueDate >= t.start && item.dueDate <= t.end && (
         <div
           className="gantt-due"
-          style={{ left: xOf(t, item.endDate) + t.dayWidth / 2 }}
-          title={`Jira due ${formatMedium(item.endDate)}`}
+          data-testid={`gantt-due-${item.key}`}
+          style={{ left: xOf(t, item.dueDate) + t.dayWidth / 2 }}
+          title={`Due ${formatMedium(item.dueDate)}`}
         />
       )}
     </div>

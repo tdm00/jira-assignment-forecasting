@@ -28,9 +28,9 @@ import { detectFileType } from '../../src/parsers/detectFileType';
 import { parseCrewCsv, parseRole } from '../../src/parsers/crewCsv';
 import { item, sample, testSettings } from '../helpers';
 
-const alice: StaffMember = { id: 'alice', name: 'Alice Chen' };
-const bob: StaffMember = { id: 'bob', name: 'Bob Martinez' };
-const carla: StaffMember = { id: 'carla', name: 'Carla Singh' };
+const alice: StaffMember = { id: 'alice', name: 'Alice Chen', userId: '' };
+const bob: StaffMember = { id: 'bob', name: 'Bob Martinez', userId: '' };
+const carla: StaffMember = { id: 'carla', name: 'Carla Singh', userId: '' };
 const closure = { id: 'c1', name: 'Veterans Day', start: '2026-11-11', end: '2026-11-11' };
 
 const slot = (

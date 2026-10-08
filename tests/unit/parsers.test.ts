@@ -70,7 +70,7 @@ describe('parseJiraCsv', () => {
   it('maps columns and sorts by rank (REQ-IMP-004, REQ-IMP-005)', () => {
     const { items, skipped, missingColumns } = parseJiraCsv(fixture('jira.csv'));
     expect(skipped).toBe(0);
-    expect(missingColumns).toEqual([]);
+    expect(missingColumns).toEqual(['assignee', 'endDate']);
     expect(items.map((i) => i.key)).toEqual(['A-1', 'A-2', 'B-1', 'U-1']);
     expect(items[0]).toMatchObject({
       summary: 'Alpha discovery',
@@ -80,7 +80,9 @@ describe('parseJiraCsv', () => {
       storyPoints: 5,
       slaDays: 3,
       startDate: null,
-      endDate: '2026-11-30',
+      endDate: null,
+      dueDate: '2026-11-30',
+      assignee: '',
       rank: '0|i0001:',
     });
     expect(items[2]!.summary).toBe('Bravo platform, with "quotes"');
@@ -106,7 +108,25 @@ describe('parseJiraCsv', () => {
       storyPoints: 2,
       slaDays: 4,
       startDate: '2026-01-02',
-      endDate: '2026-01-15',
+      dueDate: '2026-01-15',
+      endDate: null,
+    });
+  });
+
+  it('maps assignee, status type, target dates and due date from custom fields', () => {
+    const { items } = parseJiraCsv(fixture('jira-custom.csv'));
+    expect(items[0]).toMatchObject({
+      key: 'C-1',
+      summary: 'Custom row',
+      assignee: 'E9',
+      crew: 'Phoenix',
+      status: 'In Progress',
+      storyPoints: 5,
+      startDate: '2026-11-02',
+      endDate: '2026-11-20',
+      dueDate: '2026-12-01',
+      rank: '0|i0002:',
+      architect: '',
     });
   });
 
@@ -128,21 +148,36 @@ describe('parseJiraCsv', () => {
 describe('parseStaffCsv', () => {
   it('reads a staff column and removes duplicates', () => {
     expect(parseStaffCsv('Name,Email\nAlice,a@x\n alice ,b@x\n,\nBob,c@x')).toEqual({
-      names: ['Alice', 'Bob'],
+      people: [
+        { name: 'Alice', userId: '' },
+        { name: 'Bob', userId: '' },
+      ],
       skipped: 1,
     });
   });
   it('reads a plain list without header', () => {
-    expect(parseStaffCsv('Alice Chen\nBob  Martinez\n').names).toEqual([
-      'Alice Chen',
-      'Bob Martinez',
+    expect(parseStaffCsv('Alice Chen\nBob  Martinez\n').people).toEqual([
+      { name: 'Alice Chen', userId: '' },
+      { name: 'Bob Martinez', userId: '' },
     ]);
   });
   it('prefers a person column', () => {
-    expect(parseStaffCsv('Team,Architect\nX,Carla').names).toEqual(['Carla']);
+    expect(parseStaffCsv('Team,Architect\nX,Carla').people).toEqual([
+      { name: 'Carla', userId: '' },
+    ]);
+  });
+  it('reads a User ID and skips duplicate or non-alphanumeric ids', () => {
+    expect(parseStaffCsv('User ID,Name\nE1,Alice\ne1,Bob\nE2,Cara\n,Dan\nA-1,Erin\n')).toEqual({
+      people: [
+        { name: 'Alice', userId: 'E1' },
+        { name: 'Cara', userId: 'E2' },
+        { name: 'Dan', userId: '' },
+      ],
+      skipped: 2,
+    });
   });
   it('handles empty input', () => {
-    expect(parseStaffCsv('')).toEqual({ names: [], skipped: 0 });
+    expect(parseStaffCsv('')).toEqual({ people: [], skipped: 0 });
   });
 });
 

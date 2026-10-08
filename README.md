@@ -34,13 +34,13 @@ will start and finish.
 
 ### Input files
 
-| File        | Required columns                                                                                                    | Example                                             |
-| ----------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| Staff       | `Name` (or a plain list, one name per line)                                                                         | [staff.csv](docs/sample-data/staff.csv)             |
-| Vacations   | `Staff`, `Start Date`, optional `End Date`, `Note`                                                                  | [vacations.csv](docs/sample-data/vacations.csv)     |
-| Closures    | `Date`, optional `End Date`, `Name`                                                                                 | [closures.csv](docs/sample-data/closures.csv)       |
-| Crew pools  | `Crew`, `Architect`, `Role` (1-3), optional `Available From`                                                        | [crew-pools.csv](docs/sample-data/crew-pools.csv)   |
-| Jira export | `Issue key`, `Summary`, `Crew`, `Architect`, `Status`, `Story Points`, `SLA Days`, `Start date`, `Due date`, `Rank` | [jira-export.csv](docs/sample-data/jira-export.csv) |
+| File        | Required columns                                                                                                                                                                   | Example                                             |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Staff       | `Name` (first and last name) and optional `User ID`, or one name per line                                                                                                          | [staff.csv](docs/sample-data/staff.csv)             |
+| Vacations   | `Staff`, `Start Date`, optional `End Date`, `Note`                                                                                                                                 | [vacations.csv](docs/sample-data/vacations.csv)     |
+| Closures    | `Date`, optional `End Date`, `Name`                                                                                                                                                | [closures.csv](docs/sample-data/closures.csv)       |
+| Crew pools  | `Crew`, `Architect`, `Role` (1-3), optional `Available From`                                                                                                                       | [crew-pools.csv](docs/sample-data/crew-pools.csv)   |
+| Jira export | `Issue key`, `Summary`, `Crew`, `Architect` or `Assignee`, `Status` or `Status Type`, `Story Points`, `SLA Days`, `Start date` or `Target start`, `Target end`, `Due date`, `Rank` | [jira-export.csv](docs/sample-data/jira-export.csv) |
 
 Jira `Custom field (...)` headers and several aliases are recognised. See
 [docs/requirements/02-data-import.md](docs/requirements/02-data-import.md).

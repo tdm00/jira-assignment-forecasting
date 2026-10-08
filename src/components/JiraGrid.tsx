@@ -18,7 +18,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Fragment, memo, useMemo, type Dispatch } from 'react';
 import { endDelta, formatDelta, type Reference, type ReferenceEntry } from '../core/compare';
 import { crewStats } from '../core/focus';
-import { crewKey, normalizeName } from '../core/scheduler';
+import { crewKey, normalizeName, resolveArchitect } from '../core/scheduler';
 import {
   AUTO_ASSIGN,
   type FlagCode,
@@ -62,7 +62,7 @@ const FLAG_INFO: Record<FlagCode, { label: string; Icon: typeof AlertIcon; tone:
     Icon: UserIcon,
     tone: 'info',
   },
-  late: { label: 'Forecast finishes after the Jira end date', Icon: ClockIcon, tone: 'danger' },
+  late: { label: 'Forecast finishes after the due date', Icon: ClockIcon, tone: 'danger' },
   'no-crew-pool': {
     label: 'The crew has no architect pool; assigned to the next available architect',
     Icon: UserXIcon,
@@ -152,10 +152,13 @@ const SortableRow = memo(function SortableRow(p: RowProps) {
     transition,
   };
 
-  const jiraMatch = staff.find((x) => normalizeName(x.name) === normalizeName(item.architect));
-  const jiraLabel = item.architect.trim()
-    ? `${item.architect}${jiraMatch ? '' : ' (not in staff)'}`
-    : 'Unassigned';
+  const jiraResolved = resolveArchitect({ ...item, architectOverride: null }, staff, false);
+  const jiraLabel =
+    jiraResolved.kind === 'staff'
+      ? jiraResolved.staff.name
+      : jiraResolved.kind === 'unknown'
+        ? `${jiraResolved.name} (not in staff)`
+        : 'Unassigned';
 
   const note = assignNote(s, item.architect);
 
@@ -257,6 +260,7 @@ const SortableRow = memo(function SortableRow(p: RowProps) {
       </td>
       {!p.compact && <td className="col-date">{formatShort(item.startDate)}</td>}
       {!p.compact && <td className="col-date">{formatShort(item.endDate)}</td>}
+      {!p.compact && <td className="col-date">{formatShort(item.dueDate)}</td>}
       <td
         className="col-date col-forecast"
         data-testid={`fstart-${item.key}`}
@@ -323,7 +327,10 @@ export function JiraGrid({
       if (s.start) dates.push(s.start);
       if (s.end) dates.push(s.end);
     }
-    for (const i of items) if (i.endDate) dates.push(i.endDate);
+    for (const i of items) {
+      if (i.endDate) dates.push(i.endDate);
+      if (i.dueDate) dates.push(i.dueDate);
+    }
     for (const r of Object.values(reference?.items ?? {})) {
       if (r.start) dates.push(r.start);
       if (r.end) dates.push(r.end);
@@ -338,7 +345,7 @@ export function JiraGrid({
     1 +
     (compact ? 0 : 1) +
     2 +
-    (compact ? 0 : 2) +
+    (compact ? 0 : 3) +
     2 +
     (showDelta ? 1 : 0) +
     2;
@@ -400,6 +407,7 @@ export function JiraGrid({
               </th>
               {!compact && <th className="col-date">Jira start</th>}
               {!compact && <th className="col-date">Jira end</th>}
+              {!compact && <th className="col-date">Due</th>}
               <th className="col-date col-forecast">Fcst start</th>
               <th className="col-date col-forecast">Fcst end</th>
               {showDelta && (

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { moveItem } from '../../src/core/rank';
 import {
   estimateDays,
+  peopleMissingFromJira,
   resolveArchitect,
   schedule,
   summarize,
@@ -10,8 +11,8 @@ import {
 import { AUTO_ASSIGN, type JiraItem, type StaffMember } from '../../src/core/types';
 import { item, testSettings } from '../helpers';
 
-const alice: StaffMember = { id: 'alice', name: 'Alice Chen' };
-const bob: StaffMember = { id: 'bob', name: 'Bob Martinez' };
+const alice: StaffMember = { id: 'alice', name: 'Alice Chen', userId: 'A100' };
+const bob: StaffMember = { id: 'bob', name: 'Bob Martinez', userId: '' };
 const veterans = { id: 'c1', name: 'Veterans Day', start: '2026-11-11', end: '2026-11-11' };
 
 function run(items: JiraItem[], patch: Partial<ScheduleInput> = {}) {
@@ -66,6 +67,35 @@ describe('resolveArchitect (REQ-STF-006)', () => {
       name: 'Zed',
     });
     expect(resolveArchitect(item({ architect: '' }), [alice], false)).toEqual({ kind: 'none' });
+  });
+  it('matches an assignee id ignoring case and still falls back to the architect name', () => {
+    expect(
+      resolveArchitect(item({ assignee: '  a100 ', architect: 'Other' }), [alice], true),
+    ).toEqual({ kind: 'staff', staff: alice });
+    expect(
+      resolveArchitect(item({ assignee: 'ZZZ', architect: 'Alice Chen' }), [alice], true),
+    ).toEqual({ kind: 'staff', staff: alice });
+    expect(resolveArchitect(item({ assignee: 'ZZZ', architect: '' }), [alice], true)).toEqual({
+      kind: 'unknown',
+      name: 'ZZZ',
+    });
+  });
+});
+
+describe('peopleMissingFromJira', () => {
+  it('offers one person for an unmatched id and name, and keeps the id when the name is taken', () => {
+    const offers = peopleMissingFromJira(
+      [
+        item({ architect: 'Bob Martinez', assignee: 'B2' }),
+        item({ architect: 'Alice Chen', assignee: 'A9' }),
+        item({ architect: 'Bob Martinez', assignee: 'B2' }),
+      ],
+      [alice],
+    );
+    expect(offers).toEqual([
+      { name: 'Bob Martinez', userId: 'B2' },
+      { name: 'A9', userId: 'A9' },
+    ]);
   });
 });
 
@@ -238,9 +268,26 @@ describe('schedule', () => {
     expect(r.get('Z2')!.start).toBe('2026-11-12');
   });
 
-  it('flags items forecast after their Jira end date', () => {
-    const r = run([item({ key: 'L', architect: 'Alice Chen', slaDays: 5, endDate: '2026-11-10' })]);
+  it('flags items forecast after their due date', () => {
+    const r = run([item({ key: 'L', architect: 'Alice Chen', slaDays: 5, dueDate: '2026-11-10' })]);
     expect(r.get('L')!.flags).toContain('late');
+    const onTime = run([
+      item({ key: 'T', architect: 'Alice Chen', slaDays: 5, endDate: '2026-11-10' }),
+    ]);
+    expect(onTime.get('T')!.flags).not.toContain('late');
+  });
+
+  it('done items fall back to the due date when target end is blank', () => {
+    const r = run([
+      item({
+        key: 'D',
+        architect: 'Alice Chen',
+        status: 'Done',
+        startDate: '2026-10-01',
+        dueDate: '2026-10-06',
+      }),
+    ]);
+    expect(r.get('D')).toMatchObject({ state: 'done', start: '2026-10-01', end: '2026-10-06' });
   });
 
   it('is deterministic (REQ-SCH-012)', () => {
@@ -252,7 +299,11 @@ describe('schedule', () => {
   });
 
   it('schedules 500 items for 20 architects quickly (REQ-NFR-004)', () => {
-    const staff = Array.from({ length: 20 }, (_, i) => ({ id: `s${i}`, name: `Person ${i}` }));
+    const staff = Array.from({ length: 20 }, (_, i) => ({
+      id: `s${i}`,
+      name: `Person ${i}`,
+      userId: '',
+    }));
     const items = Array.from({ length: 500 }, (_, i) =>
       item({ architect: i % 7 === 0 ? '' : `Person ${i % 20}`, slaDays: 1 + (i % 10) }),
     );
@@ -279,7 +330,7 @@ describe('summarize (REQ-SCH-010)', () => {
         architect: 'Bob Martinez',
         slaDays: 1,
         storyPoints: 2,
-        endDate: '2026-11-01',
+        dueDate: '2026-11-01',
       }),
       item({ key: 'D', architect: 'Bob Martinez', status: 'Done', storyPoints: 8 }),
     ];

@@ -1,27 +1,42 @@
-import { normalizeName } from '../core/scheduler';
+import { isUserId, normalizeName, normalizeUserId } from '../core/scheduler';
 import { findColumn, normalizeHeader, parseCsv } from './csv';
-import { NAME_COLUMNS, PERSON_COLUMNS } from './headers';
+import { USER_ID_COLUMNS, NAME_COLUMNS, PERSON_COLUMNS } from './headers';
 
-export function parseStaffCsv(text: string): { names: string[]; skipped: number } {
+export interface ParsedStaff {
+  name: string;
+  userId: string;
+}
+
+export function parseStaffCsv(text: string): { people: ParsedStaff[]; skipped: number } {
   const rows = parseCsv(text);
-  if (rows.length === 0) return { names: [], skipped: 0 };
+  if (rows.length === 0) return { people: [], skipped: 0 };
   const headers = rows[0]!.map(normalizeHeader);
   let col = findColumn(headers, PERSON_COLUMNS);
   if (col < 0) col = findColumn(headers, NAME_COLUMNS);
-  const body = col >= 0 ? rows.slice(1) : rows;
+  const idCol = findColumn(headers, USER_ID_COLUMNS);
+  const body = col >= 0 || idCol >= 0 ? rows.slice(1) : rows;
   const idx = Math.max(col, 0);
-  const seen = new Set<string>();
-  const names: string[] = [];
+  const seenNames = new Set<string>();
+  const seenIds = new Set<string>();
+  const people: ParsedStaff[] = [];
   let skipped = 0;
   for (const row of body) {
     const name = (row[idx] ?? '').replace(/\s+/g, ' ').trim();
-    const key = normalizeName(name);
-    if (!name || seen.has(key)) {
+    const userId = idCol >= 0 ? (row[idCol] ?? '').trim() : '';
+    const nameKey = normalizeName(name);
+    const idKey = normalizeUserId(userId);
+    if (
+      !name ||
+      seenNames.has(nameKey) ||
+      (userId !== '' && !isUserId(userId)) ||
+      (idKey && seenIds.has(idKey))
+    ) {
       skipped++;
       continue;
     }
-    seen.add(key);
-    names.push(name);
+    seenNames.add(nameKey);
+    if (idKey) seenIds.add(idKey);
+    people.push({ name, userId });
   }
-  return { names, skipped };
+  return { people, skipped };
 }

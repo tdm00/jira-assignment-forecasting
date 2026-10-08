@@ -11,7 +11,7 @@
 | REQ-GNT-005 | Must     | Non-working days are visible.                            | Weekends and closures are shaded; vacations are hatched on the affected rows.                                                        |
 | REQ-GNT-006 | Should   | Bars are coloured by architect.                          | Colours match the staff legend.                                                                                                      |
 | REQ-GNT-007 | Should   | Item state is distinguishable.                           | Done items are muted, in-progress items are striped, suggested assignments have a dashed outline, and late items have a red outline. |
-| REQ-GNT-008 | Should   | A marker shows the Jira end date.                        | A diamond marks the Jira end date when present.                                                                                      |
+| REQ-GNT-008 | Should   | A marker shows the due date.                             | A diamond marks the due date when present. The timeline includes that date so the marker stays in view.                              |
 | REQ-GNT-009 | Should   | A line marks the forecast start date.                    | A vertical line labelled with the forecast start date is drawn.                                                                      |
 | REQ-GNT-010 | Should   | The timeline can be zoomed.                              | Day, week and month zoom levels change the pixels per day.                                                                           |
 | REQ-GNT-011 | Should   | Hovering a bar shows details.                            | Tooltip shows key, summary, architect, dates, and working days.                                                                      |

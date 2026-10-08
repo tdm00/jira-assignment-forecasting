@@ -63,7 +63,8 @@ describe('importing files', () => {
     const u1 = screen.getByTestId('row-U-1');
     expect(within(u1).getByTitle(/Suggested/)).toHaveTextContent('Alice Chen');
     const a2 = screen.getByTestId('row-A-2');
-    expect(within(a2).getByRole('img', { name: /after the Jira end date/ })).toBeInTheDocument();
+    expect(within(a2).getByRole('img', { name: /after the due date/ })).toBeInTheDocument();
+    expect(screen.getByTestId('gantt-due-A-2')).toBeInTheDocument();
     expect(screen.getByTestId('stat-late')).toHaveTextContent('1');
     expect(screen.getByTestId('stat-finish')).toHaveTextContent('Nov 18, 2026');
   });
@@ -274,7 +275,7 @@ describe('persistence and export', () => {
 
   it('opens an exported project file (REQ-PER-004)', async () => {
     const user = userEvent.setup();
-    const state = testState({ staff: [{ id: 's1', name: 'Zara' }] });
+    const state = testState({ staff: [{ id: 's1', name: 'Zara', userId: '' }] });
     const json = JSON.stringify({ app: 'jira-gantt-forecaster', version: 1, data: state });
     render(<App initial={testState()} />);
     await user.upload(
