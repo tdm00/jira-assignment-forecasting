@@ -27,7 +27,7 @@ export function coerceState(raw: unknown): AppState {
   return {
     staff: (raw.staff as AppState['staff']).map((s) => ({
       ...s,
-      employeeId: s.employeeId ?? '',
+      userId: s.userId ?? '',
     })),
     vacations: raw.vacations as AppState['vacations'],
     closures: raw.closures as AppState['closures'],

@@ -275,7 +275,7 @@ describe('persistence and export', () => {
 
   it('opens an exported project file (REQ-PER-004)', async () => {
     const user = userEvent.setup();
-    const state = testState({ staff: [{ id: 's1', name: 'Zara', employeeId: '' }] });
+    const state = testState({ staff: [{ id: 's1', name: 'Zara', userId: '' }] });
     const json = JSON.stringify({ app: 'jira-gantt-forecaster', version: 1, data: state });
     render(<App initial={testState()} />);
     await user.upload(

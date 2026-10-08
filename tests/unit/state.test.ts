@@ -45,29 +45,28 @@ describe('reducer', () => {
       people: [{ name: '  alice   CHEN ' }, { name: '' }, { name: 'Carla' }],
     });
     expect(s.staff.map((x) => x.name)).toEqual(['Alice Chen', 'Bob Martinez', 'Carla']);
-    expect(s.staff.every((x) => x.employeeId === '')).toBe(true);
+    expect(s.staff.every((x) => x.userId === '')).toBe(true);
     expect(reducer(s, { type: 'addStaff', people: [{ name: 'carla' }] })).toBe(s);
   });
 
   it('rejects a duplicate employee id (REQ-STF-004)', () => {
     let s = reducer(testState(), {
       type: 'addStaff',
-      people: [{ name: 'Alice Chen', employeeId: 'E1' }],
+      people: [{ name: 'Alice Chen', userId: 'E1' }],
     });
     s = reducer(s, {
       type: 'addStaff',
       people: [
-        { name: 'Alicia', employeeId: ' e1 ' },
-        { name: 'Bob', employeeId: '' },
-        { name: 'Cara', employeeId: 'A-1' },
+        { name: 'Alicia', userId: ' e1 ' },
+        { name: 'Bob', userId: '' },
+        { name: 'Cara', userId: 'A-1' },
       ],
     });
-    expect(s.staff.map((x) => [x.name, x.employeeId])).toEqual([
+    expect(s.staff.map((x) => [x.name, x.userId])).toEqual([
       ['Alice Chen', 'E1'],
       ['Bob', ''],
-      ['Cara', 'A-1'],
     ]);
-    expect(reducer(s, { type: 'addStaff', people: [{ name: 'Dan', employeeId: 'E1' }] })).toBe(s);
+    expect(reducer(s, { type: 'addStaff', people: [{ name: 'Dan', userId: 'E1' }] })).toBe(s);
   });
 
   it('removing staff removes their vacations and overrides (REQ-STF-005)', () => {
@@ -207,7 +206,7 @@ describe('persistence (REQ-PER-001..008)', () => {
       closures: [],
       items: [{ key: 'a' }],
     });
-    expect(s.staff[0]).toMatchObject({ name: 'Ada', employeeId: '' });
+    expect(s.staff[0]).toMatchObject({ name: 'Ada', userId: '' });
     expect(s.items[0]).toMatchObject({
       assignee: '',
       dueDate: null,
@@ -390,8 +389,8 @@ describe('crew pool state (REQ-POOL-001, REQ-POOL-002, REQ-POOL-011..013)', () =
     let s = reducer(testState(), {
       type: 'addStaff',
       people: [
-        { name: 'Alice Chen', employeeId: 'EA' },
-        { name: 'Bob Martinez', employeeId: 'EB' },
+        { name: 'Alice Chen', userId: 'EA' },
+        { name: 'Bob Martinez', userId: 'EB' },
       ],
     });
     s = reducer(s, {

@@ -20,9 +20,14 @@ export function normalizeName(name: string): string {
   return name.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-/** Trimmed, case-insensitive employee or assignee id. */
-export function normalizeEmployeeId(id: string): string {
+/** Trimmed, case-insensitive User ID. */
+export function normalizeUserId(id: string): string {
   return id.trim().toLowerCase();
+}
+
+/** User IDs are letters and digits only. An empty string is not an id. */
+export function isUserId(id: string): boolean {
+  return /^[A-Za-z0-9]+$/.test(id.trim());
 }
 
 function statusIn(status: string, list: string[]): boolean {
@@ -55,9 +60,9 @@ export function resolveArchitect(
     if (s) return { kind: 'staff', staff: s };
   }
   const assignee = item.assignee.trim();
-  const assigneeKey = normalizeEmployeeId(assignee);
+  const assigneeKey = normalizeUserId(assignee);
   if (assigneeKey) {
-    const byId = staff.find((x) => normalizeEmployeeId(x.employeeId) === assigneeKey);
+    const byId = staff.find((x) => normalizeUserId(x.userId) === assigneeKey);
     if (byId) return { kind: 'staff', staff: byId };
   }
   const name = item.architect.trim();
@@ -79,27 +84,27 @@ export function resolveArchitect(
 export function peopleMissingFromJira(
   items: JiraItem[],
   staff: StaffMember[],
-): { name: string; employeeId: string }[] {
+): { name: string; userId: string }[] {
   const knownNames = new Set(staff.map((s) => normalizeName(s.name)));
   const knownIds = new Set(
     staff.flatMap((s) => {
-      const id = normalizeEmployeeId(s.employeeId);
+      const id = normalizeUserId(s.userId);
       return id ? [id] : [];
     }),
   );
-  const offers: { name: string; employeeId: string }[] = [];
-  const remember = (name: string, employeeId: string) => {
+  const offers: { name: string; userId: string }[] = [];
+  const remember = (name: string, userId: string) => {
     knownNames.add(normalizeName(name));
-    const id = normalizeEmployeeId(employeeId);
+    const id = normalizeUserId(userId);
     if (id) knownIds.add(id);
-    offers.push({ name, employeeId });
+    offers.push({ name, userId });
   };
 
   for (const item of items) {
     const rawName = item.architect.replace(/\s+/g, ' ').trim();
-    const rawId = item.assignee.trim();
+    const rawId = isUserId(item.assignee) ? item.assignee.trim() : '';
     const nameKey = normalizeName(rawName);
-    const idKey = normalizeEmployeeId(rawId);
+    const idKey = normalizeUserId(rawId);
     if (!rawName && !rawId) continue;
     if (idKey && knownIds.has(idKey)) continue;
 

@@ -4,8 +4,8 @@ export type IsoDate = string;
 export interface StaffMember {
   id: string;
   name: string;
-  /** Employee or assignee id. An empty string means the person has no id. */
-  employeeId: string;
+  /** Alphanumeric User ID. An empty string means the person has no id. */
+  userId: string;
 }
 
 export interface Vacation {
@@ -29,7 +29,7 @@ export interface JiraItem {
   crew: string;
   /** Architect name as provided by Jira. */
   architect: string;
-  /** Raw Assignee value from Jira (usually an employee id). */
+  /** Raw Assignee value from Jira (the staff User ID). */
   assignee: string;
   /** Staff id chosen in the grid. `null` = use the Jira value, `AUTO_ASSIGN` = next available. */
   architectOverride: string | null;

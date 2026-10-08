@@ -149,35 +149,32 @@ describe('parseStaffCsv', () => {
   it('reads a staff column and removes duplicates', () => {
     expect(parseStaffCsv('Name,Email\nAlice,a@x\n alice ,b@x\n,\nBob,c@x')).toEqual({
       people: [
-        { name: 'Alice', employeeId: '' },
-        { name: 'Bob', employeeId: '' },
+        { name: 'Alice', userId: '' },
+        { name: 'Bob', userId: '' },
       ],
       skipped: 1,
     });
   });
   it('reads a plain list without header', () => {
     expect(parseStaffCsv('Alice Chen\nBob  Martinez\n').people).toEqual([
-      { name: 'Alice Chen', employeeId: '' },
-      { name: 'Bob Martinez', employeeId: '' },
+      { name: 'Alice Chen', userId: '' },
+      { name: 'Bob Martinez', userId: '' },
     ]);
   });
   it('prefers a person column', () => {
     expect(parseStaffCsv('Team,Architect\nX,Carla').people).toEqual([
-      { name: 'Carla', employeeId: '' },
+      { name: 'Carla', userId: '' },
     ]);
   });
-  it('reads an employee id and skips duplicate ids', () => {
-    expect(parseStaffCsv('Name,Employee Identifier\nAlice,E1\nBob,e1\nCara,E2\nDan,\n')).toEqual({
+  it('reads a User ID and skips duplicate or non-alphanumeric ids', () => {
+    expect(parseStaffCsv('User ID,Name\nE1,Alice\ne1,Bob\nE2,Cara\n,Dan\nA-1,Erin\n')).toEqual({
       people: [
-        { name: 'Alice', employeeId: 'E1' },
-        { name: 'Cara', employeeId: 'E2' },
-        { name: 'Dan', employeeId: '' },
+        { name: 'Alice', userId: 'E1' },
+        { name: 'Cara', userId: 'E2' },
+        { name: 'Dan', userId: '' },
       ],
-      skipped: 1,
+      skipped: 2,
     });
-    expect(parseStaffCsv('Name,Assignee ID\nErin,A-1').people).toEqual([
-      { name: 'Erin', employeeId: 'A-1' },
-    ]);
   });
   it('handles empty input', () => {
     expect(parseStaffCsv('')).toEqual({ people: [], skipped: 0 });

@@ -1,7 +1,13 @@
 import { todayIso } from '../core/calendar';
 import { moveItem, moveWithinVisible, sortByRank } from '../core/rank';
 import type { Baseline } from '../core/compare';
-import { crewKey, normalizeEmployeeId, normalizeName, resolveArchitect } from '../core/scheduler';
+import {
+  crewKey,
+  isUserId,
+  normalizeName,
+  normalizeUserId,
+  resolveArchitect,
+} from '../core/scheduler';
 import type {
   Closure,
   CrewAssignment,
@@ -27,7 +33,7 @@ export interface AppState {
 export type ItemPatch = Partial<Pick<JiraItem, 'storyPoints' | 'slaDays' | 'architectOverride'>>;
 
 export type Action =
-  | { type: 'addStaff'; people: { name: string; employeeId?: string }[] }
+  | { type: 'addStaff'; people: { name: string; userId?: string }[] }
   | { type: 'removeStaff'; id: string }
   | { type: 'addVacations'; vacations: Omit<Vacation, 'id'>[] }
   | { type: 'removeVacation'; id: string }
@@ -129,20 +135,27 @@ export function reducer(state: AppState, action: Action): AppState {
       const knownNames = new Set(state.staff.map((s) => normalizeName(s.name)));
       const knownIds = new Set(
         state.staff.flatMap((s) => {
-          const id = normalizeEmployeeId(s.employeeId);
+          const id = normalizeUserId(s.userId);
           return id ? [id] : [];
         }),
       );
       const added: StaffMember[] = [];
       for (const raw of action.people) {
         const name = raw.name.replace(/\s+/g, ' ').trim();
-        const employeeId = (raw.employeeId ?? '').trim();
+        const userId = (raw.userId ?? '').trim();
         const nameKey = normalizeName(name);
-        const idKey = normalizeEmployeeId(employeeId);
-        if (!name || knownNames.has(nameKey) || (idKey && knownIds.has(idKey))) continue;
+        const idKey = normalizeUserId(userId);
+        if (
+          !name ||
+          knownNames.has(nameKey) ||
+          (userId !== '' && !isUserId(userId)) ||
+          (idKey && knownIds.has(idKey))
+        ) {
+          continue;
+        }
         knownNames.add(nameKey);
         if (idKey) knownIds.add(idKey);
-        added.push({ id: makeId('staff'), name, employeeId });
+        added.push({ id: makeId('staff'), name, userId });
       }
       return added.length ? { ...state, staff: [...state.staff, ...added] } : state;
     }

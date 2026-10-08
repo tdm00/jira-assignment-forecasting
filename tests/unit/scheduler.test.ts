@@ -11,8 +11,8 @@ import {
 import { AUTO_ASSIGN, type JiraItem, type StaffMember } from '../../src/core/types';
 import { item, testSettings } from '../helpers';
 
-const alice: StaffMember = { id: 'alice', name: 'Alice Chen', employeeId: 'A-100' };
-const bob: StaffMember = { id: 'bob', name: 'Bob Martinez', employeeId: '' };
+const alice: StaffMember = { id: 'alice', name: 'Alice Chen', userId: 'A100' };
+const bob: StaffMember = { id: 'bob', name: 'Bob Martinez', userId: '' };
 const veterans = { id: 'c1', name: 'Veterans Day', start: '2026-11-11', end: '2026-11-11' };
 
 function run(items: JiraItem[], patch: Partial<ScheduleInput> = {}) {
@@ -70,7 +70,7 @@ describe('resolveArchitect (REQ-STF-006)', () => {
   });
   it('matches an assignee id ignoring case and still falls back to the architect name', () => {
     expect(
-      resolveArchitect(item({ assignee: '  a-100 ', architect: 'Other' }), [alice], true),
+      resolveArchitect(item({ assignee: '  a100 ', architect: 'Other' }), [alice], true),
     ).toEqual({ kind: 'staff', staff: alice });
     expect(
       resolveArchitect(item({ assignee: 'ZZZ', architect: 'Alice Chen' }), [alice], true),
@@ -93,8 +93,8 @@ describe('peopleMissingFromJira', () => {
       [alice],
     );
     expect(offers).toEqual([
-      { name: 'Bob Martinez', employeeId: 'B2' },
-      { name: 'A9', employeeId: 'A9' },
+      { name: 'Bob Martinez', userId: 'B2' },
+      { name: 'A9', userId: 'A9' },
     ]);
   });
 });
@@ -302,7 +302,7 @@ describe('schedule', () => {
     const staff = Array.from({ length: 20 }, (_, i) => ({
       id: `s${i}`,
       name: `Person ${i}`,
-      employeeId: '',
+      userId: '',
     }));
     const items = Array.from({ length: 500 }, (_, i) =>
       item({ architect: i % 7 === 0 ? '' : `Person ${i % 20}`, slaDays: 1 + (i % 10) }),

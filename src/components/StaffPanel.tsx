@@ -1,5 +1,5 @@
 import { useMemo, useState, type Dispatch } from 'react';
-import { normalizeEmployeeId, peopleMissingFromJira } from '../core/scheduler';
+import { isUserId, normalizeUserId, peopleMissingFromJira } from '../core/scheduler';
 import type { Action, AppState } from '../state/store';
 import { staffColor } from '../utils/colors';
 import { TrashIcon, UserIcon } from './icons';
@@ -11,19 +11,22 @@ interface Props {
 
 export function StaffPanel({ state, dispatch }: Props) {
   const [name, setName] = useState('');
-  const [employeeId, setEmployeeId] = useState('');
+  const [userId, setUserId] = useState('');
   const { staff, items, vacations } = state;
 
   const missingFromJira = useMemo(() => peopleMissingFromJira(items, staff), [staff, items]);
+  const trimmedId = userId.trim();
+  const idInvalid = trimmedId !== '' && !isUserId(trimmedId);
   const idInUse =
-    employeeId.trim() !== '' &&
-    staff.some((s) => normalizeEmployeeId(s.employeeId) === normalizeEmployeeId(employeeId));
+    trimmedId !== '' &&
+    !idInvalid &&
+    staff.some((s) => normalizeUserId(s.userId) === normalizeUserId(trimmedId));
 
   const add = () => {
-    if (!name.trim() || idInUse) return;
-    dispatch({ type: 'addStaff', people: [{ name, employeeId }] });
+    if (!name.trim() || idInvalid || idInUse) return;
+    dispatch({ type: 'addStaff', people: [{ name, userId: trimmedId }] });
     setName('');
-    setEmployeeId('');
+    setUserId('');
   };
 
   return (
@@ -33,8 +36,8 @@ export function StaffPanel({ state, dispatch }: Props) {
       </h2>
       {staff.length === 0 && (
         <p className="hint">
-          Add the architects who can be assigned to Jira work. Type a name below or drop a staff CSV
-          (one name per line). An employee id is optional.
+          Add the architects who can be assigned to Jira work. Type a name and optional User ID, or
+          drop a staff CSV with Name and User ID columns (or one name per line).
         </p>
       )}
       <form
@@ -55,18 +58,23 @@ export function StaffPanel({ state, dispatch }: Props) {
           onChange={(e) => setName(e.target.value)}
         />
         <input
-          className="input input--id"
-          aria-label="Employee ID"
-          placeholder="Employee ID"
-          value={employeeId}
-          aria-invalid={idInUse || undefined}
-          onChange={(e) => setEmployeeId(e.target.value)}
+          className="input"
+          aria-label="User ID"
+          placeholder="User ID"
+          value={userId}
+          aria-invalid={idInvalid || idInUse || undefined}
+          onChange={(e) => setUserId(e.target.value)}
         />
-        <button type="submit" className="btn btn--primary" disabled={!name.trim() || idInUse}>
+        <button
+          type="submit"
+          className="btn btn--primary"
+          disabled={!name.trim() || idInvalid || idInUse}
+        >
           Add
         </button>
       </form>
-      {idInUse && <p className="hint">That employee ID is already in use.</p>}
+      {idInvalid && <p className="hint">User ID must be alphanumeric.</p>}
+      {idInUse && <p className="hint">That User ID is already in use.</p>}
       {missingFromJira.length > 0 && (
         <button
           type="button"
@@ -86,7 +94,7 @@ export function StaffPanel({ state, dispatch }: Props) {
               <span className="dot" style={{ background: staffColor(staff, s.id) }} />
               <span className="list__main">
                 <span>{s.name}</span>
-                {s.employeeId && <small>{s.employeeId}</small>}
+                {s.userId && <small>{s.userId}</small>}
               </span>
               {vacCount > 0 && (
                 <span className="chip" title="Vacations">
