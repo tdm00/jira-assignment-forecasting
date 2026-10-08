@@ -54,6 +54,7 @@ describe('filters', () => {
         architect: 'Bob',
         staffId: 'b',
         suggested: true,
+        assignedVia: 'auto',
         state: 'planned',
         start: null,
         end: null,

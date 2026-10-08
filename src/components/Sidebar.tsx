@@ -1,17 +1,19 @@
 import { useState, type Dispatch } from 'react';
 import type { NamedText } from '../state/importFile';
 import type { Action, AppState } from '../state/store';
+import { CrewPanel } from './CrewPanel';
 import { DataPanel } from './DataPanel';
 import { HolidayPanel } from './HolidayPanel';
 import { SettingsPanel } from './SettingsPanel';
 import { StaffPanel } from './StaffPanel';
 import { VacationPanel } from './VacationPanel';
 
-export type SidebarTab = 'data' | 'staff' | 'vacations' | 'closures' | 'settings';
+export type SidebarTab = 'data' | 'staff' | 'crews' | 'vacations' | 'closures' | 'settings';
 
 const TABS: { id: SidebarTab; label: string }[] = [
   { id: 'data', label: 'Data' },
   { id: 'staff', label: 'Staff' },
+  { id: 'crews', label: 'Crews' },
   { id: 'vacations', label: 'Vacations' },
   { id: 'closures', label: 'Closures' },
   { id: 'settings', label: 'Settings' },
@@ -54,6 +56,7 @@ export function Sidebar({ state, dispatch, onFiles, onLoadSample }: Props) {
           <DataPanel state={state} onFiles={onFiles} onLoadSample={onLoadSample} />
         )}
         {tab === 'staff' && <StaffPanel state={state} dispatch={dispatch} />}
+        {tab === 'crews' && <CrewPanel state={state} dispatch={dispatch} />}
         {tab === 'vacations' && <VacationPanel state={state} dispatch={dispatch} />}
         {tab === 'closures' && <HolidayPanel state={state} dispatch={dispatch} />}
         {tab === 'settings' && <SettingsPanel settings={state.settings} dispatch={dispatch} />}

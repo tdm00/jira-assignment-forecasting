@@ -1,5 +1,6 @@
 import { memo, type CSSProperties } from 'react';
 import { addDays, dayOfWeek, diffDays, maxDate, minDate, toUtc } from '../core/calendar';
+import type { ReferenceEntry } from '../core/compare';
 import type { Closure, IsoDate, JiraItem, ScheduledItem, Vacation } from '../core/types';
 import { formatMedium, monthName } from '../utils/format';
 import type { Zoom } from './FilterBar';
@@ -180,6 +181,8 @@ interface CellProps {
   closures: Block[];
   vacations: Block[] | undefined;
   forecastStart: IsoDate;
+  /** Where the item sat in the comparison forecast, drawn as a thin ghost bar. */
+  ghost?: ReferenceEntry;
 }
 
 function tooltip(item: JiraItem, s: ScheduledItem): string {
@@ -201,6 +204,7 @@ export const GanttCell = memo(function GanttCell({
   closures,
   vacations,
   forecastStart,
+  ghost,
 }: CellProps) {
   const hasBar = s && s.start && s.end;
   const classes = ['gantt-bar', `gantt-bar--${s?.state ?? 'planned'}`];
@@ -208,6 +212,11 @@ export const GanttCell = memo(function GanttCell({
   if (s?.flags.includes('late')) classes.push('is-late');
   const left = hasBar ? xOf(t, s.start!) : 0;
   const width = hasBar ? (diffDays(s.start!, s.end!) + 1) * t.dayWidth : 0;
+  const showGhost =
+    !!ghost?.start &&
+    !!ghost.end &&
+    s?.state !== 'done' &&
+    (ghost.start !== s?.start || ghost.end !== s?.end);
 
   return (
     <div className="gantt-cell" style={gridBackground(t)}>
@@ -239,6 +248,17 @@ export const GanttCell = memo(function GanttCell({
         >
           {width > 48 && <span className="gantt-bar__label">{item.key}</span>}
         </div>
+      )}
+      {showGhost && (
+        <div
+          className="gantt-ghost"
+          style={{
+            left: xOf(t, ghost!.start!),
+            width: (diffDays(ghost!.start!, ghost!.end!) + 1) * t.dayWidth,
+          }}
+          title={`Comparison forecast: ${formatMedium(ghost!.start)} - ${formatMedium(ghost!.end)}`}
+          data-testid={`ghost-${item.key}`}
+        />
       )}
       {item.endDate && item.endDate >= t.start && item.endDate <= t.end && (
         <div

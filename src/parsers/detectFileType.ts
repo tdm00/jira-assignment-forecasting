@@ -1,7 +1,14 @@
 import { findColumn, normalizeHeader, parseCsv } from './csv';
-import { JIRA_COLUMNS, NAME_COLUMNS, PERSON_COLUMNS, START_COLUMNS } from './headers';
+import {
+  CREW_COLUMNS,
+  JIRA_COLUMNS,
+  NAME_COLUMNS,
+  PERSON_COLUMNS,
+  ROLE_COLUMNS,
+  START_COLUMNS,
+} from './headers';
 
-export type FileKind = 'jira' | 'staff' | 'vacation' | 'closure' | 'project' | 'unknown';
+export type FileKind = 'jira' | 'staff' | 'vacation' | 'closure' | 'crew' | 'project' | 'unknown';
 
 const has = (headers: string[], aliases: readonly string[]) =>
   findColumn(headers, [...aliases]) >= 0;
@@ -12,6 +19,11 @@ export function detectFromRows(rows: string[][]): FileKind {
   const headers = first.map(normalizeHeader);
   if (has(headers, JIRA_COLUMNS.key) && has(headers, JIRA_COLUMNS.summary)) return 'jira';
   const person = has(headers, PERSON_COLUMNS);
+  const isCrewPool =
+    (person || has(headers, NAME_COLUMNS)) &&
+    has(headers, CREW_COLUMNS) &&
+    has(headers, ROLE_COLUMNS);
+  if (isCrewPool) return 'crew';
   const date = has(headers, START_COLUMNS);
   if (person && date) return 'vacation';
   if (date) return 'closure';
