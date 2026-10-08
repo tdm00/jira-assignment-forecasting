@@ -14,6 +14,12 @@ will start and finish.
   go to the next available architect.
 - **Live what-if planning.** Drag rows to reprioritize, edit story points or SLA, change
   the architect, and the Gantt updates immediately.
+- **Crew pools and what-if scenarios.** Give each crew a primary architect plus a
+  backup 2 or 3, choose how the pool picks (primary only, backup if much sooner, or
+  earliest available), and compare against a frozen baseline with per-item deltas and
+  ghost bars on the Gantt.
+- **Architect focus.** Forecast one architect's work for one crew, then add their other
+  crews to see the combined plan.
 - **Search and filter** by summary, one or more architects, and one or more crews.
 - **Saved automatically** in the browser, with project export/import (JSON) and plan
   export (CSV).
@@ -33,6 +39,7 @@ will start and finish.
 | Staff       | `Name` (or a plain list, one name per line)                                                                         | [staff.csv](docs/sample-data/staff.csv)             |
 | Vacations   | `Staff`, `Start Date`, optional `End Date`, `Note`                                                                  | [vacations.csv](docs/sample-data/vacations.csv)     |
 | Closures    | `Date`, optional `End Date`, `Name`                                                                                 | [closures.csv](docs/sample-data/closures.csv)       |
+| Crew pools  | `Crew`, `Architect`, `Role` (1-3), optional `Available From`                                                        | [crew-pools.csv](docs/sample-data/crew-pools.csv)   |
 | Jira export | `Issue key`, `Summary`, `Crew`, `Architect`, `Status`, `Story Points`, `SLA Days`, `Start date`, `Due date`, `Rank` | [jira-export.csv](docs/sample-data/jira-export.csv) |
 
 Jira `Custom field (...)` headers and several aliases are recognised. See
@@ -44,6 +51,18 @@ Items are worked in plan order. Each architect works one item at a time, and an 
 takes its SLA in working days (or story points x days-per-point when SLA is blank).
 In-progress items are scheduled first, and Done items use no capacity. The full rules
 are in [docs/requirements/08-scheduling-forecast.md](docs/requirements/08-scheduling-forecast.md).
+
+### Crew pools and architect focus
+
+- **Crews tab:** pick a primary, backup 2 and backup 3 per crew, switch slots on or off,
+  and optionally set an available-from date. Use **Seed primaries from Jira** to start.
+  Turn on **Use crew pools** (or Settings > Assignment) so the pools decide who works
+  each item.
+- **Baseline:** click **Set baseline** in the summary. Every later change shows a delta
+  column, ghost bars and a finish delta (for example `-6d vs baseline`).
+- **Architect focus:** switch from **Team** to **Architect focus**, choose an architect
+  and toggle crew chips. Details in
+  [docs/requirements/14-crew-pools-and-scenarios.md](docs/requirements/14-crew-pools-and-scenarios.md).
 
 ## Development
 

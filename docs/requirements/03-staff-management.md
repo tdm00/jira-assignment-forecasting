@@ -15,3 +15,4 @@ the source of truth for capacity: each staff member can work one item at a time.
 | REQ-STF-006 | Must     | Jira architect names are matched to staff by name.  | Matching ignores case and surrounding whitespace.                                                           |
 | REQ-STF-007 | Should   | Each staff member has a consistent colour.          | The same colour is used for the person in the staff list, legend and Gantt bars.                            |
 | REQ-STF-008 | Should   | Staff can be added from the Jira architects column. | See REQ-IMP-010.                                                                                            |
+| REQ-STF-009 | Should   | Staff can be given crew pool roles.                 | See REQ-POOL-001. An architect may be primary for several crews and backup for others.                      |

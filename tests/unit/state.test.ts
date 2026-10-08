@@ -272,3 +272,176 @@ describe('importText / importFiles', () => {
     expect(state.vacations).toHaveLength(1);
   });
 });
+
+describe('crew pool state (REQ-POOL-001, REQ-POOL-002, REQ-POOL-011..013)', () => {
+  const ids = (s: AppState) => s.staff.map((x) => x.id);
+  const base = () => {
+    let s = reducer(testState(), {
+      type: 'addStaff',
+      names: ['Alice Chen', 'Bob Martinez', 'Carla Singh'],
+    });
+    s = reducer(s, {
+      type: 'setItems',
+      fileName: 'j.csv',
+      items: [
+        item({ key: 'A', crew: 'Phoenix', architect: 'Alice Chen' }),
+        item({ key: 'B', crew: 'phoenix', architect: 'Alice Chen' }),
+        item({ key: 'C', crew: 'Phoenix', architect: 'Bob Martinez' }),
+        item({ key: 'D', crew: 'Nova', architect: 'Bob Martinez' }),
+        item({ key: 'E', crew: 'Nova', architect: 'Zed' }),
+        item({ key: 'F', crew: '', architect: 'Alice Chen' }),
+      ],
+    });
+    return s;
+  };
+
+  it('puts one person in one slot per crew and frees the previous holder', () => {
+    let s = base();
+    const [alice, bob, carla] = ids(s) as [string, string, string];
+    s = reducer(s, { type: 'setCrewSlot', crew: 'Phoenix', role: 1, staffId: alice });
+    s = reducer(s, { type: 'setCrewSlot', crew: 'Phoenix', role: 2, staffId: bob });
+    s = reducer(s, { type: 'setCrewSlot', crew: 'Phoenix', role: 3, staffId: carla });
+    expect(s.crewAssignments.map((a) => [a.staffId, a.role])).toEqual([
+      [alice, 1],
+      [bob, 2],
+      [carla, 3],
+    ]);
+    s = reducer(s, { type: 'setCrewSlot', crew: ' phoenix ', role: 1, staffId: bob });
+    const roles = Object.fromEntries(s.crewAssignments.map((a) => [a.staffId, a.role]));
+    expect(roles).toEqual({ [bob]: 1, [carla]: 3 });
+    s = reducer(s, { type: 'setCrewSlot', crew: 'Phoenix', role: 3, staffId: null });
+    expect(s.crewAssignments).toHaveLength(1);
+    expect(
+      reducer(s, { type: 'setCrewSlot', crew: '', role: 1, staffId: alice }).crewAssignments,
+    ).toHaveLength(1);
+  });
+
+  it('toggles an assignment and sets or clears availableFrom', () => {
+    const start = base();
+    const alice = ids(start)[0]!;
+    let s = reducer(start, { type: 'setCrewSlot', crew: 'Nova', role: 2, staffId: alice });
+    s = reducer(s, { type: 'toggleCrewAssignment', crew: 'nova', staffId: alice });
+    expect(s.crewAssignments[0]!.enabled).toBe(false);
+    s = reducer(s, {
+      type: 'setCrewAvailableFrom',
+      crew: 'Nova',
+      staffId: alice,
+      date: '2026-12-01',
+    });
+    expect(s.crewAssignments[0]!.availableFrom).toBe('2026-12-01');
+    s = reducer(s, { type: 'setCrewAvailableFrom', crew: 'Nova', staffId: alice, date: null });
+    expect(s.crewAssignments[0]).not.toHaveProperty('availableFrom');
+    const untouched = reducer(s, { type: 'toggleCrewAssignment', crew: 'Other', staffId: alice });
+    expect(untouched.crewAssignments).toEqual(s.crewAssignments);
+  });
+
+  it('seeds each crew primary with its most frequent Jira architect and keeps existing primaries', () => {
+    const start = base();
+    const [alice, bob] = ids(start) as [string, string];
+    let s = reducer(start, { type: 'seedCrewPools' });
+    const primaries = Object.fromEntries(
+      s.crewAssignments.map((a) => [a.crew.toLowerCase(), a.staffId]),
+    );
+    expect(primaries).toEqual({ phoenix: alice, nova: bob });
+    s = reducer(s, { type: 'setCrewSlot', crew: 'Phoenix', role: 1, staffId: bob });
+    s = reducer(s, { type: 'seedCrewPools' });
+    expect(s.crewAssignments.find((a) => a.crew === 'Phoenix' && a.role === 1)!.staffId).toBe(bob);
+  });
+
+  it('imports crew assignments and removes them with the staff member', () => {
+    const start = base();
+    const [alice, bob] = ids(start) as [string, string];
+    let s = reducer(start, {
+      type: 'importCrewAssignments',
+      assignments: [
+        { crew: 'Phoenix', staffId: alice, role: 1 },
+        { crew: 'Phoenix', staffId: bob, role: 2, availableFrom: '2026-11-02' },
+      ],
+    });
+    expect(s.crewAssignments).toHaveLength(2);
+    expect(s.crewAssignments[1]).toMatchObject({ enabled: true, availableFrom: '2026-11-02' });
+    s = reducer(s, { type: 'removeStaff', id: bob });
+    expect(s.crewAssignments.map((a) => a.staffId)).toEqual([alice]);
+  });
+
+  it('imports a crew CSV, mapping names and reporting unknown staff', () => {
+    const s = base();
+    const ok = importText(
+      'Crew,Architect,Role\nPhoenix,Alice Chen,1\nPhoenix,bob martinez,2\n',
+      'c.csv',
+      s,
+    );
+    expect(ok.kind).toBe('crew');
+    expect(ok.level).toBe('success');
+    expect(ok.message).toMatch(/2 crew assignments/);
+    const mixed = importText(
+      'Crew,Architect,Role\nPhoenix,Alice Chen,1\nNova,Zed,2\nNova,Bob Martinez,zzz\n',
+      'c.csv',
+      s,
+    );
+    expect(mixed.level).toBe('warning');
+    expect(mixed.message).toMatch(/skipped 1 invalid row, skipped 1 row for unknown staff/);
+    const none = importText('Crew,Architect,Role\nPhoenix,Zed,1\n', 'c.csv', s);
+    expect(none.level).toBe('error');
+    expect(none.message).toMatch(/add staff first/);
+    expect(importText('Crew,Architect,Role\n', 'c.csv', s).message).toMatch(/no crew assignments/);
+    expect(importText('Crew,Architect\nA,B\n', 'c.csv', s, 'crew').level).toBe('error');
+  });
+
+  it('sets and clears a baseline, and a new Jira file clears it', () => {
+    let s = base();
+    const baseline = {
+      label: 'baseline',
+      finish: '2026-12-01',
+      items: {},
+      takenAt: '2026-01-01T00:00:00.000Z',
+    };
+    s = reducer(s, { type: 'setBaseline', baseline });
+    expect(s.baseline).toEqual(baseline);
+    s = reducer(s, { type: 'clearBaseline' });
+    expect(s.baseline).toBeNull();
+    s = reducer(s, { type: 'setBaseline', baseline });
+    s = reducer(s, { type: 'setItems', items: [item()], fileName: 'again.csv' });
+    expect(s.baseline).toBeNull();
+  });
+
+  it('persists pools and the baseline, and defaults them for older saves', () => {
+    const start = base();
+    const alice = ids(start)[0]!;
+    const withPools = {
+      ...reducer(start, { type: 'setCrewSlot', crew: 'Phoenix', role: 1, staffId: alice }),
+      baseline: { label: 'baseline', finish: null, items: {}, takenAt: 'x' },
+    };
+    const round = parseProject(serializeProject(withPools));
+    expect(round.crewAssignments).toEqual(withPools.crewAssignments);
+    expect(round.baseline).toEqual(withPools.baseline);
+
+    const old = coerceState({
+      staff: [],
+      vacations: [],
+      closures: [],
+      items: [],
+      settings: { forecastStart: '2026-01-05' },
+    });
+    expect(old.crewAssignments).toEqual([]);
+    expect(old.baseline).toBeNull();
+    expect(old.settings.assignmentMode).toBe('jira');
+    expect(old.settings.poolPolicy).toBe('primary-preferred');
+    expect(old.settings.backupThresholdDays).toBe(5);
+  });
+
+  it('exports how each item was assigned', () => {
+    const start = base();
+    const alice = ids(start)[0]!;
+    const s = reducer(
+      reducer(start, { type: 'setCrewSlot', crew: 'Phoenix', role: 1, staffId: alice }),
+      {
+        type: 'updateSettings',
+        patch: { assignmentMode: 'crew-pool', forecastStart: '2026-11-09' },
+      },
+    );
+    const csv = exportPlanCsv(s.items, schedule({ ...s, scope: undefined }));
+    expect(csv.split('\n')[0]).toContain('Assigned Via');
+    expect(csv).toContain('primary');
+  });
+});

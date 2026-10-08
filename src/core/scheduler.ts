@@ -1,10 +1,13 @@
 import { WorkCalendar, addDays, maxDate } from './calendar';
 import {
   AUTO_ASSIGN,
+  type AssignedVia,
   type Closure,
+  type CrewAssignment,
   type FlagCode,
   type IsoDate,
   type JiraItem,
+  type PoolRole,
   type ScheduledItem,
   type Settings,
   type StaffMember,
@@ -53,12 +56,48 @@ export function resolveArchitect(
   return s ? { kind: 'staff', staff: s } : { kind: 'unknown', name };
 }
 
+export interface ScheduleScope {
+  staffId: string;
+  /** Normalized crew names (see `crewKey`). */
+  crews: string[];
+}
+
 export interface ScheduleInput {
   items: JiraItem[];
   staff: StaffMember[];
   vacations: Vacation[];
   closures: Closure[];
   settings: Settings;
+  crewAssignments?: CrewAssignment[];
+  /**
+   * Forecast one architect as if they only worked these crews. Assignments are
+   * decided by the team-wide plan first, then that architect's items are
+   * scheduled on their own calendar.
+   */
+  scope?: ScheduleScope;
+  /** Earliest start per item key; used to keep pool `availableFrom` dates when scoping. */
+  notBefore?: Record<string, IsoDate>;
+}
+
+/** Normalized crew name. Items without a crew use the empty string. */
+export function crewKey(crew: string): string {
+  return normalizeName(crew);
+}
+
+export function poolFor(
+  crew: string,
+  assignments: CrewAssignment[],
+  staff: StaffMember[],
+): { staff: StaffMember; assignment: CrewAssignment }[] {
+  const key = crewKey(crew);
+  if (!key) return [];
+  return assignments
+    .filter((a) => a.enabled && crewKey(a.crew) === key)
+    .sort((a, b) => a.role - b.role)
+    .flatMap((assignment) => {
+      const member = staff.find((s) => s.id === assignment.staffId);
+      return member ? [{ staff: member, assignment }] : [];
+    });
 }
 
 /**
@@ -66,7 +105,9 @@ export interface ScheduleInput {
  * each architect works one item at a time, and only working days count.
  */
 export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
+  if (input.scope) return scheduleScoped(input, input.scope);
   const { items, staff, vacations, closures, settings } = input;
+  const assignments = input.crewAssignments ?? [];
   const cal = new WorkCalendar(closures, vacations);
   const forecastStart = settings.forecastStart;
   /** Next free calendar day for each capacity bucket (staff id or unknown name). */
@@ -81,6 +122,102 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
     return cal.nextWorkingDay(busy ? maxDate(base, busy) : base, staffId);
   };
 
+  const businessDaysBetween = (from: IsoDate, to: IsoDate): number =>
+    from >= to ? 0 : cal.countWorkingDays(from, addDays(to, -1));
+
+  interface Candidate {
+    staff: StaffMember;
+    role?: PoolRole;
+    start: IsoDate;
+    floor?: IsoDate;
+  }
+
+  const earliestOf = (cands: Candidate[]): Candidate | null =>
+    cands.reduce<Candidate | null>((best, c) => (!best || c.start < best.start ? c : best), null);
+
+  const pickFromPool = (cands: Candidate[]): Candidate | null => {
+    const primary = cands[0];
+    if (!primary) return null;
+    if (settings.poolPolicy === 'earliest') return earliestOf(cands);
+    if (settings.poolPolicy === 'primary-preferred') {
+      const backup = earliestOf(cands.slice(1));
+      if (backup) {
+        const gap = businessDaysBetween(backup.start, primary.start);
+        if (gap > 0 && gap >= settings.backupThresholdDays) return backup;
+      }
+    }
+    return primary;
+  };
+
+  interface Choice {
+    resolved: Resolved;
+    via: AssignedVia;
+    role?: PoolRole;
+    suggested: boolean;
+    extraFlags: FlagCode[];
+    floor?: IsoDate;
+  }
+
+  const choose = (item: JiraItem, isInProgress: boolean, base: IsoDate): Choice => {
+    const jira = resolveArchitect(item, staff, settings.autoAssign);
+    const staffOnly = (): Candidate[] =>
+      staff.map((s) => ({ staff: s, start: earliestStart(s.id, s.id, base) }));
+    const auto = (extraFlags: FlagCode[] = []): Choice => {
+      const best = earliestOf(staffOnly());
+      return best
+        ? {
+            resolved: { kind: 'staff', staff: best.staff },
+            via: 'auto',
+            suggested: true,
+            extraFlags,
+          }
+        : { resolved: { kind: 'none' }, via: 'none', suggested: false, extraFlags };
+    };
+
+    const override = item.architectOverride;
+    if (override === AUTO_ASSIGN) return auto();
+    if (override && jira.kind === 'staff') {
+      return { resolved: jira, via: 'override', suggested: false, extraFlags: [] };
+    }
+
+    if (settings.assignmentMode === 'crew-pool') {
+      const keepsJiraArchitect = isInProgress && (jira.kind === 'staff' || jira.kind === 'unknown');
+      if (!keepsJiraArchitect) {
+        const pool = poolFor(item.crew, assignments, staff);
+        if (pool.length) {
+          const cands = pool.map(({ staff: member, assignment }) => ({
+            staff: member,
+            role: assignment.role,
+            ...(assignment.availableFrom ? { floor: assignment.availableFrom } : {}),
+            start: earliestStart(
+              member.id,
+              member.id,
+              assignment.availableFrom ? maxDate(base, assignment.availableFrom) : base,
+            ),
+          }));
+          const chosen = pickFromPool(cands)!;
+          return {
+            resolved: { kind: 'staff', staff: chosen.staff },
+            via: chosen === cands[0] ? 'primary' : 'backup',
+            role: chosen.role,
+            suggested: false,
+            extraFlags: [],
+            ...(chosen.floor ? { floor: chosen.floor } : {}),
+          };
+        }
+        if (jira.kind === 'auto') return auto(['no-crew-pool']);
+      }
+    }
+
+    if (jira.kind === 'auto') return auto();
+    if (jira.kind === 'none')
+      return { resolved: jira, via: 'none', suggested: false, extraFlags: [] };
+    return { resolved: jira, via: 'jira', suggested: false, extraFlags: [] };
+  };
+
+  const nameOf = (r: Resolved): string =>
+    r.kind === 'staff' ? r.staff.name : r.kind === 'unknown' ? r.name : UNASSIGNED;
+
   const inProgress: JiraItem[] = [];
   const planned: JiraItem[] = [];
 
@@ -92,14 +229,10 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
       const staffId = resolved.kind === 'staff' ? resolved.staff.id : null;
       result.set(item.key, {
         key: item.key,
-        architect:
-          resolved.kind === 'staff'
-            ? resolved.staff.name
-            : resolved.kind === 'unknown'
-              ? resolved.name
-              : UNASSIGNED,
+        architect: nameOf(resolved),
         staffId,
         suggested: false,
+        assignedVia: item.architectOverride && resolved.kind === 'staff' ? 'override' : 'jira',
         state: 'done',
         start,
         end,
@@ -114,44 +247,28 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
   }
 
   const place = (item: JiraItem, isInProgress: boolean) => {
-    const flags: FlagCode[] = [];
-    let resolved = resolveArchitect(item, staff, settings.autoAssign);
     const days = estimateDays(item, settings.daysPerPoint);
-    const base = isInProgress ? (item.startDate ?? forecastStart) : forecastStart;
-    let suggested = false;
-
-    if (resolved.kind === 'auto') {
-      let best: { staff: StaffMember; start: IsoDate } | null = null;
-      for (const s of staff) {
-        const start = earliestStart(s.id, s.id, base);
-        if (!best || start < best.start) best = { staff: s, start };
-      }
-      if (best) {
-        resolved = { kind: 'staff', staff: best.staff };
-        suggested = true;
-      } else {
-        resolved = { kind: 'none' };
-      }
-    }
-
+    const itemFloor = input.notBefore?.[item.key];
+    const base = isInProgress
+      ? (item.startDate ?? forecastStart)
+      : itemFloor
+        ? maxDate(forecastStart, itemFloor)
+        : forecastStart;
+    const choice = choose(item, isInProgress, base);
+    const { resolved, via, role, suggested, extraFlags } = choice;
+    const placeBase = choice.floor ? maxDate(base, choice.floor) : base;
+    const flags: FlagCode[] = [...extraFlags];
     if (resolved.kind === 'unknown') flags.push('unknown-architect');
     if (resolved.kind === 'none') flags.push('no-architect');
     if (days === null) flags.push('no-estimate');
 
-    const architect =
-      resolved.kind === 'staff'
-        ? resolved.staff.name
-        : resolved.kind === 'unknown'
-          ? resolved.name
-          : UNASSIGNED;
+    const architect = nameOf(resolved);
     const staffId = resolved.kind === 'staff' ? resolved.staff.id : null;
+    const common = { key: item.key, architect, staffId, suggested, assignedVia: via, role };
 
     if (resolved.kind === 'none' || days === null) {
       result.set(item.key, {
-        key: item.key,
-        architect,
-        staffId,
-        suggested,
+        ...common,
         state: 'unscheduled',
         start: null,
         end: null,
@@ -162,7 +279,7 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
     }
 
     const key = capKey(resolved);
-    const start = earliestStart(key, staffId, base);
+    const start = earliestStart(key, staffId, placeBase);
     let end = cal.addWorkingDays(start, days, staffId);
     if (isInProgress && end < forecastStart) end = cal.nextWorkingDay(forecastStart, staffId);
     free.set(key, maxDate(forecastStart, addDays(end, 1)));
@@ -170,10 +287,7 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
     if (item.endDate && end > item.endDate) flags.push('late');
 
     result.set(item.key, {
-      key: item.key,
-      architect,
-      staffId,
-      suggested,
+      ...common,
       state: isInProgress ? 'in-progress' : 'planned',
       start,
       end,
@@ -186,6 +300,38 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
   for (const item of planned) place(item, false);
 
   return result;
+}
+
+function scheduleScoped(input: ScheduleInput, scope: ScheduleScope): Map<string, ScheduledItem> {
+  const rest: ScheduleInput = { ...input, scope: undefined };
+  const full = schedule(rest);
+  const crews = new Set(scope.crews.map(crewKey));
+  const mine = input.items.filter(
+    (i) => full.get(i.key)?.staffId === scope.staffId && crews.has(crewKey(i.crew)),
+  );
+  const forced = mine.map((i) => ({ ...i, architectOverride: scope.staffId }));
+  const notBefore: Record<string, IsoDate> = { ...input.notBefore };
+  for (const i of mine) {
+    const via = full.get(i.key)?.assignedVia;
+    if (via !== 'primary' && via !== 'backup') continue;
+    const from = poolFor(i.crew, input.crewAssignments ?? [], input.staff).find(
+      (p) => p.staff.id === scope.staffId,
+    )?.assignment.availableFrom;
+    if (from) notBefore[i.key] = from;
+  }
+  const scoped = schedule({ ...rest, items: forced, notBefore });
+  for (const [key, s] of scoped) {
+    const f = full.get(key)!;
+    const poolFlag: FlagCode[] = f.flags.includes('no-crew-pool') ? ['no-crew-pool'] : [];
+    scoped.set(key, {
+      ...s,
+      suggested: f.suggested,
+      assignedVia: f.assignedVia,
+      role: f.role,
+      flags: [...s.flags, ...poolFlag],
+    });
+  }
+  return scoped;
 }
 
 export interface ArchitectSummary {

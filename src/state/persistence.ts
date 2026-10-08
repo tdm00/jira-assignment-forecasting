@@ -35,6 +35,10 @@ export function coerceState(raw: unknown): AppState {
     })),
     settings: { ...defaultSettings(), ...(settings as Partial<AppState['settings']>) },
     jiraFileName: typeof raw.jiraFileName === 'string' ? raw.jiraFileName : null,
+    crewAssignments: Array.isArray(raw.crewAssignments)
+      ? (raw.crewAssignments as AppState['crewAssignments'])
+      : [],
+    baseline: isObject(raw.baseline) ? (raw.baseline as unknown as AppState['baseline']) : null,
   };
 }
 
@@ -111,6 +115,7 @@ export function exportPlanCsv(items: JiraItem[], scheduled: Map<string, Schedule
       Architect: item.architect,
       'Forecast Architect': s?.architect ?? '',
       Suggested: s?.suggested ? 'yes' : '',
+      'Assigned Via': s?.assignedVia ?? '',
       Status: item.status,
       'Story Points': item.storyPoints ?? '',
       'SLA Days': item.slaDays ?? '',

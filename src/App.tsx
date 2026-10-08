@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import {
+  ArchitectFocusBar,
+  ViewSwitch,
+  type FocusScope,
+  type ViewMode,
+} from './components/ArchitectFocusBar';
 import { DataChecklist } from './components/DataPanel';
 import { DropZone } from './components/DropZone';
 import { FilterBar, type Zoom } from './components/FilterBar';
@@ -7,8 +13,23 @@ import { JiraGrid } from './components/JiraGrid';
 import { Sidebar } from './components/Sidebar';
 import { SummaryStats } from './components/SummaryStats';
 import { Toasts, type Toast } from './components/Toasts';
+import {
+  architectChanges,
+  finishDelta,
+  makeBaseline,
+  makeReference,
+  type Reference,
+} from './core/compare';
 import { applyFilters, architectOf, crewOf, distinctSorted, emptyFilters } from './core/filters';
-import { schedule, summarize } from './core/scheduler';
+import {
+  compareSelections,
+  crewStats,
+  crewsForArchitect,
+  groupByCrew,
+  itemsForArchitectCrews,
+  itemsInSchedule,
+} from './core/focus';
+import { schedule, summarize, type ScheduleInput } from './core/scheduler';
 import type { Filters } from './core/types';
 import { SAMPLE_FILES } from './sample';
 import { importFiles, type NamedText } from './state/importFile';
@@ -38,6 +59,16 @@ function initialTheme(storage: Storage | undefined): Theme {
     window.matchMedia?.('(prefers-color-scheme: dark)').matches
     ? 'dark'
     : 'light';
+}
+
+interface FocusState {
+  staffId: string | null;
+  /** Normalized crew names; `null` starts with the architect's first crew only. */
+  crews: string[] | null;
+  scope: FocusScope;
+  group: boolean;
+  /** The crew selection before the latest toggle, used for the what-if comparison. */
+  prevCrews: string[] | null;
 }
 
 interface Props {
@@ -86,25 +117,122 @@ export default function App({ initial, storage = safeStorage() }: Props) {
     }
   }, [theme, storage]);
 
+  const [view, setView] = useState<ViewMode>('team');
+  const [focus, setFocus] = useState<FocusState>({
+    staffId: null,
+    crews: null,
+    scope: 'selected',
+    group: false,
+    prevCrews: null,
+  });
+
+  const scheduleInput = useMemo<ScheduleInput>(
+    () => ({
+      items: state.items,
+      staff: state.staff,
+      vacations: state.vacations,
+      closures: state.closures,
+      settings: state.settings,
+      crewAssignments: state.crewAssignments,
+    }),
+    [
+      state.items,
+      state.staff,
+      state.vacations,
+      state.closures,
+      state.settings,
+      state.crewAssignments,
+    ],
+  );
+  const fullScheduled = useMemo(() => schedule(scheduleInput), [scheduleInput]);
+
+  const focusStaffId = useMemo(() => {
+    if (view !== 'focus') return null;
+    const chosen = state.staff.find((s) => s.id === focus.staffId);
+    if (chosen) return chosen.id;
+    const busy = state.staff.find((s) =>
+      [...fullScheduled.values()].some((x) => x.staffId === s.id && x.state !== 'done'),
+    );
+    return (busy ?? state.staff[0])?.id ?? null;
+  }, [view, focus.staffId, state.staff, fullScheduled]);
+  const focusActive = focusStaffId !== null;
+  const scoped = focusActive && focus.scope === 'selected';
+
+  const chips = useMemo(
+    () =>
+      focusStaffId
+        ? crewsForArchitect(state.items, fullScheduled, state.crewAssignments, focusStaffId)
+        : [],
+    [focusStaffId, state.items, fullScheduled, state.crewAssignments],
+  );
+  const selectedKeys = useMemo(() => {
+    const valid = chips.map((c) => c.key);
+    return focus.crews ? focus.crews.filter((k) => valid.includes(k)) : valid.slice(0, 1);
+  }, [chips, focus.crews]);
+
   const scheduled = useMemo(
     () =>
-      schedule({
-        items: state.items,
-        staff: state.staff,
-        vacations: state.vacations,
-        closures: state.closures,
-        settings: state.settings,
-      }),
-    [state.items, state.staff, state.vacations, state.closures, state.settings],
+      scoped && focusStaffId
+        ? schedule({ ...scheduleInput, scope: { staffId: focusStaffId, crews: selectedKeys } })
+        : fullScheduled,
+    [scoped, focusStaffId, selectedKeys, scheduleInput, fullScheduled],
   );
+  const focusItems = useMemo(() => {
+    if (!focusActive || !focusStaffId) return state.items;
+    return scoped
+      ? itemsInSchedule(state.items, scheduled)
+      : itemsForArchitectCrews(state.items, fullScheduled, focusStaffId, selectedKeys);
+  }, [focusActive, focusStaffId, scoped, state.items, scheduled, fullScheduled, selectedKeys]);
+
   const summary = useMemo(
-    () => summarize(state.items, scheduled, state.staff),
-    [state.items, scheduled, state.staff],
+    () =>
+      summarize(
+        focusItems,
+        scheduled,
+        focusActive ? state.staff.filter((s) => s.id === focusStaffId) : state.staff,
+      ),
+    [focusItems, scheduled, focusActive, focusStaffId, state.staff],
   );
-  const visible = useMemo(
-    () => applyFilters(state.items, scheduled, filters),
-    [state.items, scheduled, filters],
+  const visible = useMemo(() => {
+    const rows = applyFilters(focusItems, scheduled, filters);
+    return focusActive && focus.group ? groupByCrew(rows) : rows;
+  }, [focusItems, scheduled, filters, focusActive, focus.group]);
+
+  const previous = useMemo(
+    () =>
+      scoped && focusStaffId && focus.prevCrews
+        ? schedule({ ...scheduleInput, scope: { staffId: focusStaffId, crews: focus.prevCrews } })
+        : null,
+    [scoped, focusStaffId, focus.prevCrews, scheduleInput],
   );
+  const reference = useMemo<Reference | null>(() => {
+    if (scoped) return previous ? makeReference(previous, 'previous crew selection') : null;
+    return state.baseline;
+  }, [scoped, previous, state.baseline]);
+  const changes = useMemo(
+    () => (reference && !focusActive ? architectChanges(reference, scheduled) : null),
+    [reference, focusActive, scheduled],
+  );
+  const selectionChange = useMemo(() => {
+    if (!previous || !focus.prevCrews) return null;
+    const nameOf = (key: string) => chips.find((c) => c.key === key)?.name ?? (key || '(No crew)');
+    return compareSelections(
+      crewStats(itemsInSchedule(state.items, previous), previous),
+      crewStats(focusItems, scheduled),
+      focus.prevCrews,
+      selectedKeys,
+      nameOf,
+    );
+  }, [previous, focus.prevCrews, chips, state.items, focusItems, scheduled, selectedKeys]);
+  const focusStats = useMemo(() => crewStats(focusItems, scheduled), [focusItems, scheduled]);
+
+  const toggleCrew = (key: string) => {
+    const next = selectedKeys.includes(key)
+      ? selectedKeys.filter((k) => k !== key)
+      : [...selectedKeys, key];
+    setFocus((f) => ({ ...f, prevCrews: selectedKeys, crews: next }));
+  };
+
   const architectOptions = useMemo(
     () =>
       distinctSorted([
@@ -156,9 +284,14 @@ export default function App({ initial, storage = safeStorage() }: Props) {
           notify('Project exported', 'success');
         }}
         onExportCsv={() => {
+          const who = focusActive
+            ? `-${(state.staff.find((m) => m.id === focusStaffId)?.name ?? 'architect')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')}`
+            : '';
           downloadFile(
-            `jira-forecast-${stamp}.csv`,
-            exportPlanCsv(state.items, scheduled),
+            `jira-forecast${who}-${stamp}.csv`,
+            exportPlanCsv(focusItems, scheduled),
             'text/csv',
           );
           notify('Plan exported as CSV', 'success');
@@ -198,8 +331,67 @@ export default function App({ initial, storage = safeStorage() }: Props) {
             </div>
           ) : (
             <>
-              <SummaryStats summary={summary} staff={state.staff} />
+              <SummaryStats
+                summary={summary}
+                staff={state.staff}
+                changes={changes}
+                compare={
+                  reference
+                    ? {
+                        label: reference.label,
+                        finishDelta: finishDelta(reference, scheduled),
+                        onClear: scoped
+                          ? () => setFocus((f) => ({ ...f, prevCrews: null }))
+                          : undefined,
+                      }
+                    : null
+                }
+                baseline={
+                  scoped
+                    ? null
+                    : {
+                        active: state.baseline !== null,
+                        takenAt: state.baseline?.takenAt,
+                        onSet: () => {
+                          dispatch({ type: 'setBaseline', baseline: makeBaseline(fullScheduled) });
+                          notify('Baseline captured from the current forecast', 'success');
+                        },
+                        onClear: () => dispatch({ type: 'clearBaseline' }),
+                      }
+                }
+              />
+              {focusActive && focusStaffId && (
+                <ArchitectFocusBar
+                  staff={state.staff}
+                  staffId={focusStaffId}
+                  onStaff={(id) =>
+                    setFocus((f) => ({ ...f, staffId: id, crews: null, prevCrews: null }))
+                  }
+                  chips={chips}
+                  selected={selectedKeys}
+                  onToggle={toggleCrew}
+                  onAddAll={() =>
+                    setFocus((f) => ({
+                      ...f,
+                      prevCrews: selectedKeys,
+                      crews: chips.map((c) => c.key),
+                    }))
+                  }
+                  scope={focus.scope}
+                  onScope={(scope) => setFocus((f) => ({ ...f, scope }))}
+                  group={focus.group}
+                  onGroup={(group) => setFocus((f) => ({ ...f, group }))}
+                  stats={focusStats}
+                  change={selectionChange}
+                  onClearChange={() => setFocus((f) => ({ ...f, prevCrews: null }))}
+                />
+              )}
+              {view === 'focus' && !focusActive && (
+                <p className="empty-filter">Add staff members to focus on an architect.</p>
+              )}
               <FilterBar
+                leftSlot={<ViewSwitch view={view} onChange={setView} />}
+                showArchitects={!focusActive}
                 filters={filters}
                 onChange={setFilters}
                 architects={architectOptions}
@@ -209,7 +401,7 @@ export default function App({ initial, storage = safeStorage() }: Props) {
                   return staffColor(state.staff, s?.id ?? null);
                 }}
                 visibleCount={visible.length}
-                totalCount={state.items.length}
+                totalCount={focusItems.length}
                 zoom={zoom}
                 onZoom={setZoom}
                 compact={compact}
@@ -226,6 +418,8 @@ export default function App({ initial, storage = safeStorage() }: Props) {
                 dispatch={dispatch}
                 zoom={zoom}
                 compact={compact}
+                reference={reference}
+                groupByCrew={focusActive && focus.group}
               />
               <GanttLegend />
             </>
@@ -263,6 +457,9 @@ function GanttLegend() {
       </li>
       <li>
         <span className="swatch swatch--due" /> Jira end date
+      </li>
+      <li>
+        <span className="swatch swatch--ghost" /> Comparison forecast
       </li>
     </ul>
   );

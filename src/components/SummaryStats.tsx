@@ -1,17 +1,39 @@
+import { formatDelta, type ArchitectChange } from '../core/compare';
 import type { ForecastSummary } from '../core/scheduler';
 import type { StaffMember } from '../core/types';
 import { staffColor } from '../utils/colors';
 import { formatMedium, formatShort } from '../utils/format';
 
+export interface CompareInfo {
+  label: string;
+  finishDelta: number | null;
+  onClear?: () => void;
+}
+
+export interface BaselineControls {
+  active: boolean;
+  takenAt?: string;
+  onSet: () => void;
+  onClear: () => void;
+}
+
 interface Props {
   summary: ForecastSummary;
   staff: StaffMember[];
+  compare?: CompareInfo | null;
+  baseline?: BaselineControls | null;
+  changes?: Map<string, ArchitectChange> | null;
 }
 
-export function SummaryStats({ summary, staff }: Props) {
+export function SummaryStats({ summary, staff, compare, baseline, changes }: Props) {
   const fmtPoints = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
   const cards = [
-    { label: 'Forecast finish', value: formatMedium(summary.finish), testId: 'stat-finish' },
+    {
+      label: 'Forecast finish',
+      value: formatMedium(summary.finish),
+      testId: 'stat-finish',
+      delta: compare?.finishDelta ?? null,
+    },
     {
       label: 'Open items',
       value: `${summary.openItems}`,
@@ -49,9 +71,70 @@ export function SummaryStats({ summary, staff }: Props) {
               {c.value}
               {c.sub && <small> {c.sub}</small>}
             </span>
+            {c.delta !== null && c.delta !== undefined && (
+              <span
+                className={`stat-card__delta delta delta--${c.delta > 0 ? 'later' : c.delta < 0 ? 'earlier' : 'same'}`}
+                data-testid="finish-delta"
+              >
+                {c.delta === 0
+                  ? `no change vs ${compare?.label}`
+                  : `${formatDelta(c.delta)} vs ${compare?.label}`}
+              </span>
+            )}
           </div>
         ))}
       </div>
+      {(baseline || compare) && (
+        <div className="compare-bar" data-testid="compare-bar">
+          {baseline && !baseline.active && (
+            <>
+              <span>Capture the current forecast to compare what-if changes against it.</span>
+              <button
+                type="button"
+                className="btn btn--soft btn--sm"
+                data-testid="set-baseline"
+                onClick={baseline.onSet}
+              >
+                Set baseline
+              </button>
+            </>
+          )}
+          {baseline?.active && (
+            <>
+              <span>
+                Comparing with the baseline
+                {baseline.takenAt
+                  ? ` taken ${baseline.takenAt.slice(0, 16).replace('T', ' ')} UTC`
+                  : ''}
+                .
+              </span>
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                data-testid="clear-baseline"
+                onClick={baseline.onClear}
+              >
+                Clear baseline
+              </button>
+            </>
+          )}
+          {!baseline && compare && (
+            <>
+              <span>Comparing with the {compare.label}.</span>
+              {compare.onClear && (
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  data-testid="clear-compare"
+                  onClick={compare.onClear}
+                >
+                  Stop comparing
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
       {architects.length > 0 && (
         <ul className="legend" aria-label="Architect finish dates">
           {architects.map((a) => (
@@ -65,6 +148,15 @@ export function SummaryStats({ summary, staff }: Props) {
               <span className="legend__meta">
                 {a.finish ? `done ${formatShort(a.finish)}` : 'available'}
               </span>
+              {changes?.get(a.architect) && (
+                <span className="legend__changes" data-testid={`changes-${a.architect}`}>
+                  {changes.get(a.architect)!.gained > 0 && `+${changes.get(a.architect)!.gained}`}
+                  {changes.get(a.architect)!.gained > 0 &&
+                    changes.get(a.architect)!.lost > 0 &&
+                    ' / '}
+                  {changes.get(a.architect)!.lost > 0 && `-${changes.get(a.architect)!.lost}`} items
+                </span>
+              )}
             </li>
           ))}
         </ul>

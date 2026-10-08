@@ -12,3 +12,4 @@
 | REQ-PER-006 | Must     | Data can be cleared.                           | "Clear all" (with confirmation) removes all data and the saved session.                                                        |
 | REQ-PER-007 | Should   | Storage failures do not break the app.         | If `localStorage` is unavailable, the app still works for the session and shows a warning.                                     |
 | REQ-PER-008 | Must     | Project files are versioned.                   | Exported JSON contains `app` and `version` fields; incompatible files are rejected with a message.                             |
+| REQ-PER-009 | Must     | Crew pools and the baseline are persisted.     | See REQ-POOL-013. The plan CSV includes an `Assigned Via` column.                                                              |

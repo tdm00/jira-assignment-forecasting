@@ -8,21 +8,22 @@ edited, and the Gantt chart updates instantly.
 
 ## Requirements by category
 
-| #   | Document                                                                | Prefix     |
-| --- | ----------------------------------------------------------------------- | ---------- |
-| 01  | [Overview and scope](requirements/01-overview-and-scope.md)             | `REQ-OVR`  |
-| 02  | [Data import](requirements/02-data-import.md)                           | `REQ-IMP`  |
-| 03  | [Staff management](requirements/03-staff-management.md)                 | `REQ-STF`  |
-| 04  | [Availability and vacations](requirements/04-availability-vacations.md) | `REQ-VAC`  |
-| 05  | [Organization closures](requirements/05-organization-closures.md)       | `REQ-CLS`  |
-| 06  | [Jira grid](requirements/06-jira-grid.md)                               | `REQ-GRID` |
-| 07  | [Gantt visualization](requirements/07-gantt-visualization.md)           | `REQ-GNT`  |
-| 08  | [Scheduling and forecast](requirements/08-scheduling-forecast.md)       | `REQ-SCH`  |
-| 09  | [Persistence and export](requirements/09-persistence-and-export.md)     | `REQ-PER`  |
-| 10  | [UI/UX and accessibility](requirements/10-ui-ux-and-accessibility.md)   | `REQ-UX`   |
-| 11  | [Non-functional](requirements/11-non-functional.md)                     | `REQ-NFR`  |
-| 12  | [Testing strategy](requirements/12-testing-strategy.md)                 | `REQ-TST`  |
-| 13  | [Build and CI](requirements/13-build-and-ci.md)                         | `REQ-CI`   |
+| #   | Document                                                                | Prefix                  |
+| --- | ----------------------------------------------------------------------- | ----------------------- |
+| 01  | [Overview and scope](requirements/01-overview-and-scope.md)             | `REQ-OVR`               |
+| 02  | [Data import](requirements/02-data-import.md)                           | `REQ-IMP`               |
+| 03  | [Staff management](requirements/03-staff-management.md)                 | `REQ-STF`               |
+| 04  | [Availability and vacations](requirements/04-availability-vacations.md) | `REQ-VAC`               |
+| 05  | [Organization closures](requirements/05-organization-closures.md)       | `REQ-CLS`               |
+| 06  | [Jira grid](requirements/06-jira-grid.md)                               | `REQ-GRID`              |
+| 07  | [Gantt visualization](requirements/07-gantt-visualization.md)           | `REQ-GNT`               |
+| 08  | [Scheduling and forecast](requirements/08-scheduling-forecast.md)       | `REQ-SCH`               |
+| 09  | [Persistence and export](requirements/09-persistence-and-export.md)     | `REQ-PER`               |
+| 10  | [UI/UX and accessibility](requirements/10-ui-ux-and-accessibility.md)   | `REQ-UX`                |
+| 11  | [Non-functional](requirements/11-non-functional.md)                     | `REQ-NFR`               |
+| 12  | [Testing strategy](requirements/12-testing-strategy.md)                 | `REQ-TST`               |
+| 13  | [Build and CI](requirements/13-build-and-ci.md)                         | `REQ-CI`                |
+| 14  | [Crew pools and scenarios](requirements/14-crew-pools-and-scenarios.md) | `REQ-POOL`, `REQ-FOCUS` |
 
 Example input files live in [sample-data/](sample-data/).
 
@@ -49,4 +50,7 @@ Every requirement has:
 | Working day          | A business day on which a specific architect is not on vacation.                                 |
 | Closure              | A date or date range when the whole organization is closed (for example a bank holiday).         |
 | Forecast             | The computed start and end dates for an item.                                                    |
+| Crew pool            | The ordered architects (primary, backup 2, backup 3) who may work a crew's items.                |
+| Baseline             | A frozen forecast that later changes are compared against.                                       |
+| Architect focus      | A view that forecasts one architect's work for chosen crews.                                     |
 | Suggested assignment | An architect automatically chosen for an unassigned item.                                        |

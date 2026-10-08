@@ -1,6 +1,6 @@
 import { useEffect, useState, type Dispatch } from 'react';
 import { isValidIsoDate } from '../core/calendar';
-import type { Settings } from '../core/types';
+import type { AssignmentMode, PoolPolicy, Settings } from '../core/types';
 import type { Action } from '../state/store';
 
 interface Props {
@@ -72,6 +72,54 @@ export function SettingsPanel({ settings, dispatch }: Props) {
             }}
           />
         </label>
+        <label className="field">
+          <span>Who works an item</span>
+          <select
+            className="input"
+            value={settings.assignmentMode}
+            data-testid="assignment-mode"
+            onChange={(e) => update({ assignmentMode: e.target.value as AssignmentMode })}
+          >
+            <option value="jira">Architect from the Jira file</option>
+            <option value="crew-pool">Crew pools (primary and backups)</option>
+          </select>
+        </label>
+        {settings.assignmentMode === 'crew-pool' && (
+          <>
+            <label className="field">
+              <span>Crew pool policy</span>
+              <select
+                className="input"
+                value={settings.poolPolicy}
+                data-testid="pool-policy"
+                onChange={(e) => update({ poolPolicy: e.target.value as PoolPolicy })}
+              >
+                <option value="primary-only">Primary only</option>
+                <option value="primary-preferred">
+                  Primary preferred, backup when much sooner
+                </option>
+                <option value="earliest">Earliest available in the pool</option>
+              </select>
+            </label>
+            {settings.poolPolicy === 'primary-preferred' && (
+              <label className="field">
+                <span>Backup must start this many business days sooner</span>
+                <input
+                  className="input"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={settings.backupThresholdDays}
+                  data-testid="backup-threshold"
+                  onChange={(e) => {
+                    const n = Math.floor(Number(e.target.value));
+                    if (Number.isFinite(n) && n >= 1) update({ backupThresholdDays: n });
+                  }}
+                />
+              </label>
+            )}
+          </>
+        )}
         <label className="check">
           <input
             type="checkbox"
