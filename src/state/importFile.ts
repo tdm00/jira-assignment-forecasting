@@ -129,7 +129,7 @@ export function importText(
       }
       case 'unknown':
         return fail(
-          `${fileName}: unrecognised file. Expected a Jira, staff, vacation or closure CSV.`,
+          `${fileName}: unrecognised file. Expected a Jira, staff, vacation, closure or crew pool CSV.`,
         );
     }
   } catch (err) {
