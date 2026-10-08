@@ -165,3 +165,39 @@ describe('architect focus (REQ-FOCUS-*)', () => {
     expect(screen.getByText('This architect has no crews yet.')).toBeInTheDocument();
   });
 });
+
+describe('architect dropdown order (REQ-STF-010)', () => {
+  const names = (select: HTMLElement) =>
+    [...select.querySelectorAll('option')].map((o) => o.textContent);
+
+  it('lists staff alphabetically while the forecast keeps the stored staff order', async () => {
+    const user = userEvent.setup();
+    const state = scenario({
+      staff: [
+        { id: 'zed', name: 'Zed Young' },
+        { id: 'alice', name: 'alice chen' },
+        { id: 'bob', name: 'Bob Martinez' },
+      ],
+      crewAssignments: [],
+      settings: { ...testState().settings, assignmentMode: 'jira' },
+    });
+    render(<App initial={state} />);
+    expect(names(screen.getByLabelText('Architect for P-1'))).toEqual([
+      'Unassigned',
+      'Auto (next available)',
+      'alice chen',
+      'Bob Martinez',
+      'Zed Young',
+    ]);
+    // Unassigned items still go to the first person in the stored list.
+    expect(screen.getByTestId('row-P-1')).toHaveTextContent('Zed Young');
+
+    await user.click(screen.getByRole('tab', { name: 'Crews' }));
+    expect(names(screen.getByLabelText('Primary for Phoenix'))).toEqual([
+      'None',
+      'alice chen',
+      'Bob Martinez',
+      'Zed Young',
+    ]);
+  });
+});

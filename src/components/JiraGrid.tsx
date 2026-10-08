@@ -17,6 +17,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { Fragment, memo, useMemo, type Dispatch } from 'react';
 import { endDelta, formatDelta, type Reference, type ReferenceEntry } from '../core/compare';
+import { sortStaffByName } from '../core/filters';
 import { crewStats } from '../core/focus';
 import { crewKey, normalizeName } from '../core/scheduler';
 import {
@@ -219,7 +220,7 @@ const SortableRow = memo(function SortableRow(p: RowProps) {
         >
           <option value="">{jiraLabel}</option>
           <option value={AUTO_ASSIGN}>Auto (next available)</option>
-          {staff.map((m) => (
+          {sortStaffByName(staff).map((m) => (
             <option key={m.id} value={m.id}>
               {m.name}
             </option>

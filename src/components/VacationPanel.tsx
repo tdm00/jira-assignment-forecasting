@@ -1,4 +1,5 @@
 import { useState, type Dispatch } from 'react';
+import { sortStaffByName } from '../core/filters';
 import type { Action, AppState } from '../state/store';
 import { staffColor } from '../utils/colors';
 import { formatRange } from '../utils/format';
@@ -17,7 +18,8 @@ export function VacationPanel({ state, dispatch }: Props) {
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
 
-  const selected = staffId || staff[0]?.id || '';
+  const sortedStaff = sortStaffByName(staff);
+  const selected = staffId || sortedStaff[0]?.id || '';
   const sorted = [...vacations].sort((a, b) => a.start.localeCompare(b.start));
   const nameOf = (id: string) => staff.find((s) => s.id === id)?.name ?? 'Unknown';
 
@@ -59,7 +61,7 @@ export function VacationPanel({ state, dispatch }: Props) {
           <label className="field">
             <span>Staff member</span>
             <select className="input" value={selected} onChange={(e) => setStaffId(e.target.value)}>
-              {staff.map((s) => (
+              {sortedStaff.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>

@@ -20,7 +20,14 @@ import {
   makeReference,
   type Reference,
 } from './core/compare';
-import { applyFilters, architectOf, crewOf, distinctSorted, emptyFilters } from './core/filters';
+import {
+  applyFilters,
+  architectOf,
+  crewOf,
+  distinctSorted,
+  emptyFilters,
+  sortStaffByName,
+} from './core/filters';
 import {
   compareSelections,
   crewStats,
@@ -150,10 +157,11 @@ export default function App({ initial, storage = safeStorage() }: Props) {
     if (view !== 'focus') return null;
     const chosen = state.staff.find((s) => s.id === focus.staffId);
     if (chosen) return chosen.id;
-    const busy = state.staff.find((s) =>
+    const ordered = sortStaffByName(state.staff);
+    const busy = ordered.find((s) =>
       [...fullScheduled.values()].some((x) => x.staffId === s.id && x.state !== 'done'),
     );
-    return (busy ?? state.staff[0])?.id ?? null;
+    return (busy ?? ordered[0])?.id ?? null;
   }, [view, focus.staffId, state.staff, fullScheduled]);
   const focusActive = focusStaffId !== null;
   const scoped = focusActive && focus.scope === 'selected';
