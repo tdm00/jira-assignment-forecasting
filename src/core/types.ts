@@ -103,4 +103,6 @@ export interface Filters {
   search: string;
   architects: string[];
   crews: string[];
+  /** Selected statuses, compared ignoring case. A blank status is "(No status)". */
+  statuses: string[];
 }

@@ -176,6 +176,20 @@ describe('parseStaffCsv', () => {
       skipped: 2,
     });
   });
+  it('accepts a plain ID column as the user id', () => {
+    expect(parseStaffCsv('ID,Name\nPL83640,Troy Murray\n')).toEqual({
+      people: [{ name: 'Troy Murray', userId: 'PL83640' }],
+      skipped: 0,
+    });
+    expect(parseStaffCsv('ID, Name\nPL83640, Troy Murray\n').people).toEqual([
+      { name: 'Troy Murray', userId: 'PL83640' },
+    ]);
+  });
+  it('prefers User ID over ID when a file has both', () => {
+    expect(parseStaffCsv('ID,User ID,Name\n1,PL1,Ann\n').people).toEqual([
+      { name: 'Ann', userId: 'PL1' },
+    ]);
+  });
   it('handles empty input', () => {
     expect(parseStaffCsv('')).toEqual({ people: [], skipped: 0 });
   });

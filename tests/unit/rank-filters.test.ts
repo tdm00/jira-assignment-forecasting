@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   NO_CREW,
+  NO_STATUS,
   applyFilters,
   architectOf,
   distinctSorted,
   emptyFilters,
   isFiltered,
+  statusOf,
+  statusOptions,
 } from '../../src/core/filters';
 import { moveItem, moveWithinVisible, sortByRank } from '../../src/core/rank';
 import { UNASSIGNED } from '../../src/core/scheduler';
@@ -92,14 +95,57 @@ describe('filters', () => {
 
   it('combines filters with AND (REQ-GRID-005)', () => {
     expect(
-      keys(applyFilters(items, scheduled, { search: 'payments', architects: ['Bob'], crews: [] })),
+      keys(
+        applyFilters(items, scheduled, {
+          ...emptyFilters,
+          search: 'payments',
+          architects: ['Bob'],
+        }),
+      ),
     ).toEqual(['LED-3']);
+  });
+
+  describe('status', () => {
+    const withStatus = [
+      item({ key: 'T-1', status: 'To Do' }),
+      item({ key: 'T-2', status: 'In Progress' }),
+      item({ key: 'T-3', status: 'Cancelled' }),
+      item({ key: 'T-4', status: ' in progress ' }),
+      item({ key: 'T-5', status: '' }),
+    ];
+    const none = new Map<string, ScheduledItem>();
+
+    it('keeps rows in any selected status, ignoring case and spacing (REQ-GRID-016)', () => {
+      const pick = (statuses: string[]) =>
+        keys(applyFilters(withStatus, none, { ...emptyFilters, statuses }));
+      expect(pick(['In Progress'])).toEqual(['T-2', 'T-4']);
+      expect(pick(['to do', 'IN PROGRESS'])).toEqual(['T-1', 'T-2', 'T-4']);
+      expect(pick([])).toHaveLength(5);
+    });
+
+    it('treats a blank status as (No status)', () => {
+      expect(statusOf(withStatus[4]!)).toBe(NO_STATUS);
+      expect(
+        keys(applyFilters(withStatus, none, { ...emptyFilters, statuses: [NO_STATUS] })),
+      ).toEqual(['T-5']);
+    });
+
+    it('lists each status once, sorted, merging spellings that differ only in case', () => {
+      expect(statusOptions(withStatus)).toEqual([NO_STATUS, 'Cancelled', 'In Progress', 'To Do']);
+    });
+
+    it('combines with the other filters using AND', () => {
+      const f = { ...emptyFilters, search: 't-2', statuses: ['In Progress'] };
+      expect(keys(applyFilters(withStatus, none, f))).toEqual(['T-2']);
+      expect(keys(applyFilters(withStatus, none, { ...f, statuses: ['To Do'] }))).toEqual([]);
+    });
   });
 
   it('reports whether filters are active', () => {
     expect(isFiltered(emptyFilters)).toBe(false);
     expect(isFiltered({ ...emptyFilters, search: ' x ' })).toBe(true);
     expect(isFiltered({ ...emptyFilters, crews: ['A'] })).toBe(true);
+    expect(isFiltered({ ...emptyFilters, statuses: ['To Do'] })).toBe(true);
   });
 
   it('labels unassigned items and sorts distinct values', () => {

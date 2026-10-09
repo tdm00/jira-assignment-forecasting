@@ -20,7 +20,14 @@ import {
   makeReference,
   type Reference,
 } from './core/compare';
-import { applyFilters, architectOf, crewOf, distinctSorted, emptyFilters } from './core/filters';
+import {
+  applyFilters,
+  architectOf,
+  crewOf,
+  distinctSorted,
+  emptyFilters,
+  statusOptions,
+} from './core/filters';
 import {
   compareSelections,
   crewStats,
@@ -242,6 +249,7 @@ export default function App({ initial, storage = safeStorage() }: Props) {
     [state.staff, state.items, scheduled],
   );
   const crewOptions = useMemo(() => distinctSorted(state.items.map(crewOf)), [state.items]);
+  const statusChoices = useMemo(() => statusOptions(state.items), [state.items]);
 
   const handleFiles = useCallback(
     (files: NamedText[]) => {
@@ -396,6 +404,7 @@ export default function App({ initial, storage = safeStorage() }: Props) {
                 onChange={setFilters}
                 architects={architectOptions}
                 crews={crewOptions}
+                statuses={statusChoices}
                 colorFor={(name) => {
                   const s = state.staff.find((x) => x.name === name);
                   return staffColor(state.staff, s?.id ?? null);

@@ -13,7 +13,7 @@ export const JIRA_COLUMNS = {
   rank: ['rank'],
 } as const satisfies Record<string, readonly string[]>;
 
-export const USER_ID_COLUMNS = ['user id'];
+export const USER_ID_COLUMNS = ['user id', 'id'];
 
 export const PERSON_COLUMNS = [
   'staff',

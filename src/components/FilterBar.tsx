@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { isFiltered } from '../core/filters';
+import { emptyFilters, isFiltered } from '../core/filters';
 import type { Filters } from '../core/types';
 import { MultiSelect } from './MultiSelect';
 import { ResetIcon, SearchIcon, XIcon } from './icons';
@@ -11,6 +11,7 @@ interface Props {
   onChange: (f: Filters) => void;
   architects: string[];
   crews: string[];
+  statuses: string[];
   colorFor: (architect: string) => string | undefined;
   visibleCount: number;
   totalCount: number;
@@ -54,12 +55,14 @@ export function FilterBar(p: Props) {
         selected={filters.crews}
         onChange={(crews) => onChange({ ...filters, crews })}
       />
+      <MultiSelect
+        label="Status"
+        options={p.statuses}
+        selected={filters.statuses}
+        onChange={(statuses) => onChange({ ...filters, statuses })}
+      />
       {isFiltered(filters) && (
-        <button
-          type="button"
-          className="btn btn--ghost"
-          onClick={() => onChange({ search: '', architects: [], crews: [] })}
-        >
+        <button type="button" className="btn btn--ghost" onClick={() => onChange(emptyFilters)}>
           <XIcon /> Clear filters
         </button>
       )}

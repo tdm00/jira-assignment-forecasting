@@ -145,6 +145,36 @@ describe('search and filters', () => {
     await user.type(screen.getByLabelText('Search summary'), 'spike');
     expect(rowKeys()).toEqual(['U-1']);
   });
+
+  it('filters by status as soon as it is picked, without changing the forecast (REQ-GRID-016, REQ-GRID-006)', async () => {
+    const user = userEvent.setup();
+    render(<App initial={testState()} />);
+    const jira = [
+      'Summary,Issue key,Status,Custom field (Architect),Custom field (Story Points),Custom field (SLA Days),Custom field (Rank)',
+      'Alpha,S-1,To Do,Alice Chen,5,3,0|i0001:',
+      'Beta,S-2,In Progress,Alice Chen,3,2,0|i0002:',
+      'Gamma,S-3,Cancelled,Alice Chen,3,2,0|i0003:',
+      'Delta,S-4,in progress,Bob Martinez,1,1,0|i0004:',
+    ].join('\n');
+    await user.upload(screen.getByTestId('file-input'), [
+      csv('staff.csv'),
+      new File([jira], 'status.csv', { type: 'text/csv' }),
+    ]);
+    await screen.findByTestId('row-S-1');
+    const before = [fstart('S-2'), fend('S-2'), fstart('S-4'), fend('S-4')];
+
+    await user.click(screen.getByRole('button', { name: /Status/ }));
+    await user.click(screen.getByRole('checkbox', { name: 'In Progress' }));
+    expect(rowKeys()).toEqual(['S-2', 'S-4']);
+    expect([fstart('S-2'), fend('S-2'), fstart('S-4'), fend('S-4')]).toEqual(before);
+
+    await user.click(screen.getByRole('checkbox', { name: 'To Do' }));
+    expect(rowKeys()).toEqual(['S-1', 'S-2', 'S-4']);
+
+    await user.click(screen.getByRole('button', { name: /Clear filters/ }));
+    expect(rowKeys()).toEqual(['S-1', 'S-2', 'S-3', 'S-4']);
+    expect([fstart('S-2'), fend('S-2')]).toEqual(before.slice(0, 2));
+  });
 });
 
 describe('reordering', () => {

@@ -7,7 +7,7 @@
 | Jira export  | `Issue key` / `Key` **and** `Summary`                                                              | [jira-export.csv](../sample-data/jira-export.csv) |
 | Vacations    | a person column (`Staff`, `Architect`, `Person`, `Employee`, `Staff Member`) **and** a date column | [vacations.csv](../sample-data/vacations.csv)     |
 | Closures     | a date column (`Date`, `Start Date`, `Start`) and no person column                                 | [closures.csv](../sample-data/closures.csv)       |
-| Staff list   | `Name` and optional alphanumeric `User ID`, or a plain list with one name per line                 | [staff.csv](../sample-data/staff.csv)             |
+| Staff list   | `Name` and optional alphanumeric `User ID` (or `ID`), or a plain list with one name per line       | [staff.csv](../sample-data/staff.csv)             |
 | Crew pools   | a crew column (`Crew`, `Team`, `Squad`), a person column (or `Name`) **and** a `Role` column       | [crew-pools.csv](../sample-data/crew-pools.csv)   |
 | Project file | a `.json` file previously exported by the app                                                      | -                                                 |
 
@@ -45,7 +45,7 @@ Accepted date formats: `YYYY-MM-DD` (optionally followed by a time), `M/D/YYYY`,
 | REQ-IMP-006 | Must     | Invalid rows are skipped and reported.                        | Rows without a Jira key, and rows repeating an earlier key, are skipped. A notification states the number imported and skipped.                                                    |
 | REQ-IMP-007 | Must     | Unknown files are rejected with a clear message.              | Dropping an unrecognised file shows an error naming the file. Existing data is unchanged.                                                                                          |
 | REQ-IMP-008 | Should   | Re-importing a Jira file replaces the items.                  | Importing a second Jira file replaces all items and resets the plan order to the new file's rank.                                                                                  |
-| REQ-IMP-009 | Should   | Staff, vacation and closure imports merge with existing data. | Duplicate staff names and duplicate non-empty User IDs (case-insensitive) are not added twice. Non-alphanumeric User IDs are skipped.                                              |
+| REQ-IMP-009 | Should   | Staff, vacation and closure imports merge with existing data. | Duplicate staff names and duplicate non-empty User IDs (case-insensitive) are not added twice. A repeated name fills in a missing User ID. Non-alphanumeric User IDs are skipped.  |
 | REQ-IMP-010 | Should   | Staff named as architects in Jira can be added in one action. | When a Jira assignee id or architect name is not in the staff list, the Staff panel offers "Add N architects from Jira". A row with both an unmatched id and a name is one person. |
 | REQ-IMP-011 | Must     | Quoted CSV fields are parsed correctly.                       | Summaries containing commas, quotes and new lines import intact.                                                                                                                   |
 | REQ-IMP-012 | Should   | Crew pool files are imported by staff name.                   | Rows naming a person who is not in the staff list are skipped and reported; valid rows are merged into the crew pools (REQ-POOL-012).                                              |

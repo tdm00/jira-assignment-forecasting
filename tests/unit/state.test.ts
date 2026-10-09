@@ -69,6 +69,32 @@ describe('reducer', () => {
     expect(reducer(s, { type: 'addStaff', people: [{ name: 'Dan', userId: 'E1' }] })).toBe(s);
   });
 
+  it('re-importing a name fills a missing user id without adding a duplicate', () => {
+    let s = reducer(testState(), { type: 'addStaff', people: [{ name: 'Troy Murray' }] });
+    const id = s.staff[0]!.id;
+    s = reducer(s, {
+      type: 'addStaff',
+      people: [{ name: ' troy  murray ', userId: 'PL83640' }],
+    });
+    expect(s.staff).toHaveLength(1);
+    expect(s.staff[0]).toMatchObject({ id, name: 'Troy Murray', userId: 'PL83640' });
+    // An id that is already set is never overwritten, and a no-op keeps the same state.
+    expect(
+      reducer(s, { type: 'addStaff', people: [{ name: 'Troy Murray', userId: 'OTHER1' }] }),
+    ).toBe(s);
+  });
+
+  it('re-import does not take an id that belongs to someone else', () => {
+    let s = reducer(testState(), {
+      type: 'addStaff',
+      people: [{ name: 'Alice', userId: 'E1' }, { name: 'Bob' }],
+    });
+    const next = reducer(s, { type: 'addStaff', people: [{ name: 'Bob', userId: 'e1' }] });
+    expect(next).toBe(s);
+    s = reducer(s, { type: 'addStaff', people: [{ name: 'Bob', userId: 'A-1' }] });
+    expect(s.staff[1]!.userId).toBe('');
+  });
+
   it('removing staff removes their vacations and overrides (REQ-STF-005)', () => {
     let s = withStaff();
     const bob = s.staff[1]!.id;

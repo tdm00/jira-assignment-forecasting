@@ -132,32 +132,40 @@ export function seedPools(state: AppState): CrewAssignment[] {
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'addStaff': {
-      const knownNames = new Set(state.staff.map((s) => normalizeName(s.name)));
+      const staff = [...state.staff];
+      const indexByName = new Map(staff.map((s, i) => [normalizeName(s.name), i]));
       const knownIds = new Set(
-        state.staff.flatMap((s) => {
+        staff.flatMap((s) => {
           const id = normalizeUserId(s.userId);
           return id ? [id] : [];
         }),
       );
-      const added: StaffMember[] = [];
+      let changed = false;
       for (const raw of action.people) {
         const name = raw.name.replace(/\s+/g, ' ').trim();
         const userId = (raw.userId ?? '').trim();
         const nameKey = normalizeName(name);
         const idKey = normalizeUserId(userId);
-        if (
-          !name ||
-          knownNames.has(nameKey) ||
-          (userId !== '' && !isUserId(userId)) ||
-          (idKey && knownIds.has(idKey))
-        ) {
+        if (!name || (userId !== '' && !isUserId(userId)) || (idKey && knownIds.has(idKey))) {
           continue;
         }
-        knownNames.add(nameKey);
+        const existing = indexByName.get(nameKey);
+        if (existing !== undefined) {
+          // A repeat name never adds a second person, but it can supply a missing user id.
+          const member = staff[existing]!;
+          if (idKey && member.userId === '') {
+            staff[existing] = { ...member, userId };
+            knownIds.add(idKey);
+            changed = true;
+          }
+          continue;
+        }
+        indexByName.set(nameKey, staff.length);
         if (idKey) knownIds.add(idKey);
-        added.push({ id: makeId('staff'), name, userId });
+        staff.push({ id: makeId('staff'), name, userId });
+        changed = true;
       }
-      return added.length ? { ...state, staff: [...state.staff, ...added] } : state;
+      return changed ? { ...state, staff } : state;
     }
     case 'removeStaff':
       return {
