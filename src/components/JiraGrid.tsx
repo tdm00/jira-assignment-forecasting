@@ -18,7 +18,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Fragment, memo, useMemo, type Dispatch } from 'react';
 import { endDelta, formatDelta, type Reference, type ReferenceEntry } from '../core/compare';
 import { crewStats } from '../core/focus';
-import { crewKey, normalizeName, resolveArchitect } from '../core/scheduler';
+import { crewKey, normalizeName, resolveArchitect, sortStaffByName } from '../core/scheduler';
 import {
   AUTO_ASSIGN,
   type FlagCode,
@@ -96,11 +96,15 @@ export function DeltaBadge({ days, isNew }: { days: number | null; isNew?: boole
   );
 }
 
-export function Flags({ flags }: { flags: FlagCode[] }) {
+export function Flags({ flags, dueDate }: { flags: FlagCode[]; dueDate?: IsoDate | null }) {
   return (
     <span className="flags">
       {flags.map((f) => {
-        const { label, Icon, tone } = FLAG_INFO[f];
+        const { Icon, tone } = FLAG_INFO[f];
+        const label =
+          f === 'late' && dueDate
+            ? `${FLAG_INFO[f].label} ${formatShort(dueDate)}`
+            : FLAG_INFO[f].label;
         return (
           <span
             key={f}
@@ -123,6 +127,8 @@ interface RowProps {
   position: number;
   s: ScheduledItem | undefined;
   staff: StaffMember[];
+  /** The same staff sorted by name, for the architect dropdown. */
+  staffByName: StaffMember[];
   color: string;
   compact: boolean;
   t: Timeline;
@@ -136,7 +142,7 @@ interface RowProps {
 }
 
 const SortableRow = memo(function SortableRow(p: RowProps) {
-  const { item, s, staff, dispatch } = p;
+  const { item, s, staff, staffByName, dispatch } = p;
   const {
     attributes,
     listeners,
@@ -222,7 +228,7 @@ const SortableRow = memo(function SortableRow(p: RowProps) {
         >
           <option value="">{jiraLabel}</option>
           <option value={AUTO_ASSIGN}>Auto (next available)</option>
-          {staff.map((m) => (
+          {staffByName.map((m) => (
             <option key={m.id} value={m.id}>
               {m.name}
             </option>
@@ -284,7 +290,7 @@ const SortableRow = memo(function SortableRow(p: RowProps) {
         </td>
       )}
       <td className="col-flags">
-        <Flags flags={s?.flags ?? []} />
+        <Flags flags={s?.flags ?? []} dueDate={item.dueDate} />
       </td>
       <td className="col-gantt">
         <GanttCell
@@ -313,6 +319,7 @@ export function JiraGrid({
   groupByCrew,
 }: Props) {
   const { staff, items, settings } = state;
+  const staffByName = useMemo(() => sortStaffByName(staff), [staff]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -450,6 +457,7 @@ export function JiraGrid({
                       position={positions.get(item.key) ?? 0}
                       s={s}
                       staff={staff}
+                      staffByName={staffByName}
                       color={staffColor(staff, s?.staffId ?? null)}
                       compact={compact}
                       t={t}

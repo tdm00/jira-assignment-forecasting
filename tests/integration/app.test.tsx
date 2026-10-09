@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../src/App';
 import { STORAGE_KEY } from '../../src/state/persistence';
-import { fixture, testState } from '../helpers';
+import { fixture, item, testState } from '../helpers';
 
 const csv = (name: string) => new File([fixture(name)], name, { type: 'text/csv' });
 const ALL = ['staff.csv', 'closures.csv', 'vacations.csv', 'jira.csv'];
@@ -64,6 +64,9 @@ describe('importing files', () => {
     expect(within(u1).getByTitle(/Suggested/)).toHaveTextContent('Alice Chen');
     const a2 = screen.getByTestId('row-A-2');
     expect(within(a2).getByRole('img', { name: /after the due date/ })).toBeInTheDocument();
+    expect(
+      within(a2).getByRole('img', { name: 'Forecast finishes after the due date Nov 13' }),
+    ).toHaveAttribute('title', 'Forecast finishes after the due date Nov 13');
     expect(screen.getByTestId('gantt-due-A-2')).toBeInTheDocument();
     expect(screen.getByTestId('stat-late')).toHaveTextContent('1');
     expect(screen.getByTestId('stat-finish')).toHaveTextContent('Nov 18, 2026');
@@ -135,6 +138,39 @@ describe('search and filters', () => {
     expect(fend('B-1')).toBe('Nov 18');
     await user.click(screen.getByRole('checkbox', { name: 'Alice Chen' }));
     expect(rowKeys()).toEqual(['A-1', 'A-2', 'B-1', 'U-1']);
+  });
+
+  it('updates the stats to the visible rows without changing the forecast (REQ-GRID-017)', async () => {
+    const user = await setup();
+    expect(screen.queryByTestId('stats-filtered')).not.toBeInTheDocument();
+    expect(screen.getByTestId('stat-open')).toHaveTextContent('4 of 4');
+    expect(screen.getByTestId('stat-late')).toHaveTextContent('1');
+    expect(screen.getByTestId('stat-finish')).toHaveTextContent('Nov 18, 2026');
+
+    await user.type(screen.getByLabelText('Search summary'), 'bravo');
+    expect(rowKeys()).toEqual(['B-1']);
+    expect(screen.getByTestId('stats-filtered')).toHaveTextContent(
+      'Filtered: showing stats for 1 of 4 items',
+    );
+    expect(screen.getByTestId('stat-open')).toHaveTextContent('1 of 1');
+    expect(screen.getByTestId('stat-late')).toHaveTextContent('0');
+    expect(screen.getByTestId('stat-finish')).toHaveTextContent('Nov 18, 2026');
+    expect(fend('B-1')).toBe('Nov 18');
+    // Only architects with matching rows are listed while filtering.
+    const legend = screen.getByRole('list', { name: 'Architect finish dates' });
+    expect(within(legend).getByText('Bob Martinez')).toBeInTheDocument();
+    expect(within(legend).queryByText('Alice Chen')).not.toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText('Search summary'));
+    await user.type(screen.getByLabelText('Search summary'), 'alpha');
+    expect(screen.getByTestId('stat-open')).toHaveTextContent('2 of 2');
+    expect(screen.getByTestId('stat-late')).toHaveTextContent('1');
+    expect(screen.getByTestId('stat-finish')).toHaveTextContent('Nov 16, 2026');
+
+    await user.click(screen.getByRole('button', { name: /Clear filters/ }));
+    expect(screen.queryByTestId('stats-filtered')).not.toBeInTheDocument();
+    expect(screen.getByTestId('stat-open')).toHaveTextContent('4 of 4');
+    expect(screen.getByTestId('stat-finish')).toHaveTextContent('Nov 18, 2026');
   });
 
   it('filters by crews (REQ-GRID-004, REQ-GRID-005)', async () => {
@@ -340,6 +376,93 @@ describe('theme and layout (REQ-UX-003, REQ-UX-008)', () => {
     expect(toasts).toHaveLength(2);
     await user.click(within(toasts[0]!).getByRole('button', { name: 'Dismiss' }));
     expect(screen.getAllByTestId('toast')).toHaveLength(1);
+  });
+});
+
+describe('staff sorted by name (REQ-STF-010)', () => {
+  it('lists staff alphabetically in the grid dropdown and the Staff panel', async () => {
+    const user = userEvent.setup();
+    const staff = [
+      { id: 's1', name: 'Zed Young', userId: '' },
+      { id: 's2', name: 'Alice Chen', userId: '' },
+      { id: 's3', name: 'Mike Ross', userId: '' },
+    ];
+    render(
+      <App
+        initial={testState({
+          staff,
+          items: [item({ key: 'X-1', summary: 'Sorted', architect: 'Mike Ross', slaDays: 1 })],
+        })}
+      />,
+    );
+    await user.click(screen.getByRole('tab', { name: 'Staff' }));
+
+    const options = within(screen.getByLabelText('Architect for X-1'))
+      .getAllByRole('option')
+      .map((o) => o.textContent);
+    expect(options.slice(2)).toEqual(['Alice Chen', 'Mike Ross', 'Zed Young']);
+
+    const names = ['Alice Chen', 'Mike Ross', 'Zed Young'];
+    const listed = within(screen.getByRole('list', { name: 'Staff members' }))
+      .getAllByRole('listitem')
+      .map((li) => names.find((n) => li.textContent?.includes(n)));
+    expect(listed).toEqual(names);
+  });
+});
+
+describe('help (REQ-UX-010)', () => {
+  it('opens from the header and explains baseline, exports, crew pools and seeding', async () => {
+    const user = userEvent.setup();
+    render(<App initial={testState()} />);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Help/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Help' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    for (const title of [
+      'Set baseline',
+      'Export project, Open project and Export CSV',
+      'Crew pools',
+      'Seed primaries from Jira',
+    ]) {
+      expect(within(dialog).getByRole('heading', { name: title })).toBeInTheDocument();
+    }
+    expect(within(dialog).getByText(/never changes a primary you already chose/)).toBeVisible();
+
+    // Topic links scroll to a section and keep the dialog open.
+    await user.click(within(dialog).getByRole('button', { name: 'Seed primaries from Jira' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('closes with Escape, the close button or a click outside, and returns focus', async () => {
+    const user = userEvent.setup();
+    render(<App initial={testState()} />);
+    const open = screen.getByRole('button', { name: /Help/ });
+
+    await user.click(open);
+    expect(screen.getByRole('button', { name: 'Close help' })).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(open).toHaveFocus();
+
+    await user.click(open);
+    await user.click(screen.getByRole('button', { name: 'Close help' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await user.click(open);
+    await user.click(screen.getByTestId('help-backdrop'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('keeps Tab focus inside the dialog', async () => {
+    const user = userEvent.setup();
+    render(<App initial={testState()} />);
+    await user.click(screen.getByRole('button', { name: /Help/ }));
+    const dialog = screen.getByRole('dialog');
+    await user.tab({ shift: true });
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    for (let i = 0; i < 14; i++) await user.tab();
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
   });
 });
 

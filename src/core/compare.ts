@@ -40,6 +40,32 @@ export function makeBaseline(scheduled: Map<string, ScheduledItem>, now = new Da
   return { ...makeReference(scheduled, 'baseline'), takenAt: now.toISOString() };
 }
 
+/** The forecast limited to the given item keys (for example the rows left after filtering). */
+export function pickScheduled(
+  scheduled: Map<string, ScheduledItem>,
+  keys: Iterable<string>,
+): Map<string, ScheduledItem> {
+  const out = new Map<string, ScheduledItem>();
+  for (const key of keys) {
+    const s = scheduled.get(key);
+    if (s) out.set(key, s);
+  }
+  return out;
+}
+
+/** The reference limited to the given keys, with its finish recomputed from those items. */
+export function restrictReference(ref: Reference, keys: Iterable<string>): Reference {
+  const items: Record<string, ReferenceEntry> = {};
+  let finish: IsoDate | null = null;
+  for (const key of keys) {
+    const entry = ref.items[key];
+    if (!entry) continue;
+    items[key] = entry;
+    if (entry.end && (!finish || entry.end > finish)) finish = entry.end;
+  }
+  return { ...ref, finish, items };
+}
+
 /** Calendar days the forecast end moved versus the reference. `null` when not comparable. */
 export function endDelta(
   ref: ReferenceEntry | undefined,

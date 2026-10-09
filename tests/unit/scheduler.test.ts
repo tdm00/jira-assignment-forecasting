@@ -5,6 +5,7 @@ import {
   peopleMissingFromJira,
   resolveArchitect,
   schedule,
+  sortStaffByName,
   summarize,
   type ScheduleInput,
 } from '../../src/core/scheduler';
@@ -25,6 +26,22 @@ function run(items: JiraItem[], patch: Partial<ScheduleInput> = {}) {
     ...patch,
   });
 }
+
+describe('sortStaffByName (REQ-STF-010)', () => {
+  it('sorts a copy by name, ignoring case, and leaves the original order alone', () => {
+    const staff = [
+      { id: '1', name: 'zed Young', userId: '' },
+      { id: '2', name: 'Alice Chen', userId: '' },
+      { id: '3', name: 'bob Martinez', userId: '' },
+    ];
+    expect(sortStaffByName(staff).map((s) => s.name)).toEqual([
+      'Alice Chen',
+      'bob Martinez',
+      'zed Young',
+    ]);
+    expect(staff.map((s) => s.id)).toEqual(['1', '2', '3']);
+  });
+});
 
 describe('estimateDays (REQ-SCH-002, REQ-SCH-003)', () => {
   it('uses SLA when present', () => {

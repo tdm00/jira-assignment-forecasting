@@ -1,5 +1,10 @@
 import { useMemo, useState, type Dispatch } from 'react';
-import { isUserId, normalizeUserId, peopleMissingFromJira } from '../core/scheduler';
+import {
+  isUserId,
+  normalizeUserId,
+  peopleMissingFromJira,
+  sortStaffByName,
+} from '../core/scheduler';
 import type { Action, AppState } from '../state/store';
 import { staffColor } from '../utils/colors';
 import { TrashIcon, UserIcon } from './icons';
@@ -13,6 +18,7 @@ export function StaffPanel({ state, dispatch }: Props) {
   const [name, setName] = useState('');
   const [userId, setUserId] = useState('');
   const { staff, items, vacations } = state;
+  const staffByName = useMemo(() => sortStaffByName(staff), [staff]);
 
   const missingFromJira = useMemo(() => peopleMissingFromJira(items, staff), [staff, items]);
   const trimmedId = userId.trim();
@@ -87,7 +93,7 @@ export function StaffPanel({ state, dispatch }: Props) {
         </button>
       )}
       <ul className="list" aria-label="Staff members">
-        {staff.map((s) => {
+        {staffByName.map((s) => {
           const vacCount = vacations.filter((v) => v.staffId === s.id).length;
           return (
             <li key={s.id} className="list__item">

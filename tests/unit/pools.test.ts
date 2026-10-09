@@ -7,6 +7,8 @@ import {
   formatDelta,
   makeBaseline,
   makeReference,
+  pickScheduled,
+  restrictReference,
 } from '../../src/core/compare';
 import {
   compareSelections,
@@ -364,6 +366,29 @@ describe('baseline comparison (REQ-POOL-008..010)', () => {
     const changes = architectChanges(base, now);
     expect(changes.get('Bob Martinez')).toEqual({ gained: 1, lost: 0 });
     expect(changes.get('Alice Chen')).toEqual({ gained: 0, lost: 1 });
+  });
+
+  it('compares only the chosen rows when the reference and forecast are limited to them', () => {
+    const base = makeBaseline(run(items(), [pool[0]!], 'earliest'));
+    const now = run(items(), pool, 'earliest');
+    const first = ['Phoenix-1'];
+    const second = ['Phoenix-2'];
+
+    const refFirst = restrictReference(base, first);
+    expect(Object.keys(refFirst.items)).toEqual(first);
+    expect(refFirst.finish).toBe(base.items['Phoenix-1']!.end);
+    expect(finishDelta(refFirst, pickScheduled(now, first))).toBe(0);
+    expect(architectChanges(refFirst, pickScheduled(now, first)).size).toBe(0);
+
+    const refSecond = restrictReference(base, second);
+    expect(finishDelta(refSecond, pickScheduled(now, second))!).toBeLessThan(0);
+    expect(architectChanges(refSecond, pickScheduled(now, second)).get('Bob Martinez')).toEqual({
+      gained: 1,
+      lost: 0,
+    });
+    // Keys that are unknown to either side are ignored.
+    expect([...pickScheduled(now, ['nope']).keys()]).toEqual([]);
+    expect(restrictReference(base, ['nope']).finish).toBeNull();
   });
 
   it('formats deltas', () => {

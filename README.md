@@ -20,7 +20,10 @@ will start and finish.
   ghost bars on the Gantt.
 - **Architect focus.** Forecast one architect's work for one crew, then add their other
   crews to see the combined plan.
-- **Search and filter** by summary, one or more architects, and one or more crews.
+- **Search and filter** by summary, one or more architects, crews and statuses. The
+  summary cards follow the filters.
+- **Built-in help.** The **Help** button explains baselines, exports, crew pools and the
+  other less obvious controls.
 - **Saved automatically** in the browser, with project export/import (JSON) and plan
   export (CSV).
 

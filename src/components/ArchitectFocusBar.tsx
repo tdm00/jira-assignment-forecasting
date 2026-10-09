@@ -1,4 +1,5 @@
 import type { CrewChip, CrewStat, SelectionChange } from '../core/focus';
+import { sortStaffByName } from '../core/scheduler';
 import type { StaffMember } from '../core/types';
 import { staffColor } from '../utils/colors';
 import { formatMedium } from '../utils/format';
@@ -71,7 +72,7 @@ export function ArchitectFocusBar(p: Props) {
             aria-label="Focus architect"
             onChange={(e) => p.onStaff(e.target.value)}
           >
-            {p.staff.map((s) => (
+            {sortStaffByName(p.staff).map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>

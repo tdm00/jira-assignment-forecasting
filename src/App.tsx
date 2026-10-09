@@ -18,6 +18,8 @@ import {
   finishDelta,
   makeBaseline,
   makeReference,
+  pickScheduled,
+  restrictReference,
   type Reference,
 } from './core/compare';
 import {
@@ -26,6 +28,7 @@ import {
   crewOf,
   distinctSorted,
   emptyFilters,
+  isFiltered,
   statusOptions,
 } from './core/filters';
 import {
@@ -191,19 +194,25 @@ export default function App({ initial, storage = safeStorage() }: Props) {
       : itemsForArchitectCrews(state.items, fullScheduled, focusStaffId, selectedKeys);
   }, [focusActive, focusStaffId, scoped, state.items, scheduled, fullScheduled, selectedKeys]);
 
+  // Filters only choose which rows are shown and counted. The forecast above is not affected.
+  const filteredItems = useMemo(
+    () => applyFilters(focusItems, scheduled, filters),
+    [focusItems, scheduled, filters],
+  );
+  const filtering = isFiltered(filters);
   const summary = useMemo(
     () =>
       summarize(
-        focusItems,
+        filteredItems,
         scheduled,
         focusActive ? state.staff.filter((s) => s.id === focusStaffId) : state.staff,
       ),
-    [focusItems, scheduled, focusActive, focusStaffId, state.staff],
+    [filteredItems, scheduled, focusActive, focusStaffId, state.staff],
   );
-  const visible = useMemo(() => {
-    const rows = applyFilters(focusItems, scheduled, filters);
-    return focusActive && focus.group ? groupByCrew(rows) : rows;
-  }, [focusItems, scheduled, filters, focusActive, focus.group]);
+  const visible = useMemo(
+    () => (focusActive && focus.group ? groupByCrew(filteredItems) : filteredItems),
+    [filteredItems, focusActive, focus.group],
+  );
 
   const previous = useMemo(
     () =>
@@ -216,9 +225,31 @@ export default function App({ initial, storage = safeStorage() }: Props) {
     if (scoped) return previous ? makeReference(previous, 'previous crew selection') : null;
     return state.baseline;
   }, [scoped, previous, state.baseline]);
+  // The comparison is limited to the same rows as the stats, on both sides.
+  const statsScheduled = useMemo(
+    () =>
+      filtering
+        ? pickScheduled(
+            scheduled,
+            filteredItems.map((i) => i.key),
+          )
+        : scheduled,
+    [filtering, scheduled, filteredItems],
+  );
+  const statsReference = useMemo(
+    () =>
+      filtering && reference
+        ? restrictReference(
+            reference,
+            filteredItems.map((i) => i.key),
+          )
+        : reference,
+    [filtering, reference, filteredItems],
+  );
   const changes = useMemo(
-    () => (reference && !focusActive ? architectChanges(reference, scheduled) : null),
-    [reference, focusActive, scheduled],
+    () =>
+      statsReference && !focusActive ? architectChanges(statsReference, statsScheduled) : null,
+    [statsReference, focusActive, statsScheduled],
   );
   const selectionChange = useMemo(() => {
     if (!previous || !focus.prevCrews) return null;
@@ -343,11 +374,14 @@ export default function App({ initial, storage = safeStorage() }: Props) {
                 summary={summary}
                 staff={state.staff}
                 changes={changes}
+                filtered={
+                  filtering ? { shown: filteredItems.length, total: focusItems.length } : null
+                }
                 compare={
                   reference
                     ? {
                         label: reference.label,
-                        finishDelta: finishDelta(reference, scheduled),
+                        finishDelta: finishDelta(statsReference, statsScheduled),
                         onClear: scoped
                           ? () => setFocus((f) => ({ ...f, prevCrews: null }))
                           : undefined,

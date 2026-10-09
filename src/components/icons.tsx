@@ -147,3 +147,10 @@ export const ChartIcon = (p: IconProps) => (
     <rect x="11" y="16" width="10" height="4" rx="1" />
   </Icon>
 );
+export const HelpIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4.5" />
+    <line x1="12" y1="17.5" x2="12.01" y2="17.5" />
+  </Icon>
+);

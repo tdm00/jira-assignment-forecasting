@@ -20,6 +20,16 @@ export function normalizeName(name: string): string {
   return name.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+/**
+ * A copy of the staff list sorted by name, for display. The stored order is not changed
+ * because bar colours and the auto-assign tie-break depend on it.
+ */
+export function sortStaffByName<T extends { name: string }>(staff: readonly T[]): T[] {
+  return [...staff].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+  );
+}
+
 /** Trimmed, case-insensitive User ID. */
 export function normalizeUserId(id: string): string {
   return id.trim().toLowerCase();

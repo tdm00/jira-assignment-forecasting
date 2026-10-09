@@ -1,9 +1,11 @@
-import { useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { NamedText } from '../state/importFile';
 import { readFiles } from './DropZone';
+import { HelpPanel } from './HelpPanel';
 import {
   ChartIcon,
   DownloadIcon,
+  HelpIcon,
   MoonIcon,
   SidebarIcon,
   SunIcon,
@@ -25,6 +27,12 @@ interface Props {
 
 export function Header(p: Props) {
   const input = useRef<HTMLInputElement>(null);
+  const helpButton = useRef<HTMLButtonElement>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const closeHelp = useCallback(() => {
+    setHelpOpen(false);
+    helpButton.current?.focus();
+  }, []);
   return (
     <header className="app-header">
       <button
@@ -75,6 +83,16 @@ export function Header(p: Props) {
           <TrashIcon /> Clear all
         </button>
         <button
+          ref={helpButton}
+          type="button"
+          className="btn btn--header"
+          aria-haspopup="dialog"
+          aria-expanded={helpOpen}
+          onClick={() => setHelpOpen(true)}
+        >
+          <HelpIcon /> Help
+        </button>
+        <button
           type="button"
           className="icon-btn icon-btn--header"
           aria-label={p.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
@@ -83,6 +101,7 @@ export function Header(p: Props) {
           {p.theme === 'dark' ? <SunIcon size={18} /> : <MoonIcon size={18} />}
         </button>
       </div>
+      {helpOpen && <HelpPanel onClose={closeHelp} />}
     </header>
   );
 }

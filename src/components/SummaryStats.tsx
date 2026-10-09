@@ -23,9 +23,11 @@ interface Props {
   compare?: CompareInfo | null;
   baseline?: BaselineControls | null;
   changes?: Map<string, ArchitectChange> | null;
+  /** Set while filters are on: the cards then describe only the rows that are shown. */
+  filtered?: { shown: number; total: number } | null;
 }
 
-export function SummaryStats({ summary, staff, compare, baseline, changes }: Props) {
+export function SummaryStats({ summary, staff, compare, baseline, changes, filtered }: Props) {
   const fmtPoints = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
   const cards = [
     {
@@ -59,10 +61,16 @@ export function SummaryStats({ summary, staff, compare, baseline, changes }: Pro
       testId: 'stat-flagged',
     },
   ];
-  const architects = summary.byArchitect.filter((a) => a.items > 0 || a.staffId);
+  // While filtering, an architect with no matching rows would wrongly read "available".
+  const architects = summary.byArchitect.filter((a) => a.items > 0 || (!filtered && a.staffId));
 
   return (
     <section className="summary" aria-label="Forecast summary">
+      {filtered && (
+        <p className="summary__filtered" data-testid="stats-filtered" role="status">
+          Filtered: showing stats for {filtered.shown} of {filtered.total} items
+        </p>
+      )}
       <div className="stat-cards">
         {cards.map((c) => (
           <div key={c.label} className={`stat-card${c.tone ? ` stat-card--${c.tone}` : ''}`}>
