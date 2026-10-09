@@ -49,7 +49,7 @@ Jira `Custom field (...)` headers and several aliases are recognised. See
 
 Items are worked in plan order. Each architect works one item at a time, and an item
 takes its SLA in working days (or story points x days-per-point when SLA is blank).
-In-progress items are scheduled first, and Done items use no capacity. The full rules
+The grid order decides who goes first, whatever the status, and Done items use no capacity. The full rules
 are in [docs/requirements/08-scheduling-forecast.md](docs/requirements/08-scheduling-forecast.md).
 
 ### Crew pools and architect focus

@@ -284,8 +284,8 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
   const nameOf = (r: Resolved): string =>
     r.kind === 'staff' ? r.staff.name : r.kind === 'unknown' ? r.name : UNASSIGNED;
 
-  const inProgress: JiraItem[] = [];
-  const planned: JiraItem[] = [];
+  /** Items to place, in plan (grid) order regardless of status. */
+  const ordered: { item: JiraItem; isInProgress: boolean }[] = [];
 
   for (const item of items) {
     const resolved = resolveArchitect(item, staff, settings.autoAssign);
@@ -306,9 +306,9 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
         flags: [],
       });
     } else if (statusIn(item.status, settings.inProgressStatuses)) {
-      inProgress.push(item);
+      ordered.push({ item, isInProgress: true });
     } else {
-      planned.push(item);
+      ordered.push({ item, isInProgress: false });
     }
   }
 
@@ -362,8 +362,7 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
     });
   };
 
-  for (const item of inProgress) place(item, true);
-  for (const item of planned) place(item, false);
+  for (const { item, isInProgress } of ordered) place(item, isInProgress);
 
   return result;
 }

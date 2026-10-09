@@ -220,8 +220,7 @@ describe('schedule', () => {
     expect(r.get('D')).toMatchObject({ state: 'done', start: null, architect: 'Zed' });
   });
 
-  it('schedules in-progress items first from their Jira start (REQ-SCH-008)', () => {
-    const planned = item({ key: 'P', architect: 'Alice Chen', slaDays: 2 });
+  it('starts an in-progress item from its Jira start when it is first in the grid (REQ-SCH-008)', () => {
     const wip = item({
       key: 'W',
       architect: 'Alice Chen',
@@ -229,13 +228,31 @@ describe('schedule', () => {
       slaDays: 5,
       startDate: '2026-11-04',
     });
-    const r = run([planned, wip]);
+    const planned = item({ key: 'P', architect: 'Alice Chen', slaDays: 2 });
+    const r = run([wip, planned]);
     expect(r.get('W')).toMatchObject({
       state: 'in-progress',
       start: '2026-11-04',
       end: '2026-11-10',
     });
     expect(r.get('P')).toMatchObject({ start: '2026-11-12', end: '2026-11-13' });
+  });
+
+  it('places items top to bottom whatever their status (REQ-SCH-008)', () => {
+    const [a, b, c, d] = ['a', 'b', 'c', 'd'].map((key, i) =>
+      item({
+        key,
+        architect: 'Alice Chen',
+        slaDays: 2,
+        // a, c and d are in progress; b is not, but ranks second.
+        status: key === 'b' ? 'Backlog' : 'In Progress',
+        rank: `0|${i}`,
+      }),
+    );
+    const r = run([a!, b!, c!, d!]);
+    const starts = ['a', 'b', 'c', 'd'].map((k) => r.get(k)!.start!);
+    expect(starts).toEqual([...starts].sort());
+    expect(new Set(starts).size).toBe(4);
   });
 
   it('keeps overdue in-progress work ending no earlier than the forecast start', () => {
