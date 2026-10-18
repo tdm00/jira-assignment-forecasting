@@ -72,6 +72,9 @@ export function defaultSettings(): Settings {
     slaDaysField: '',
     architectField: '',
     architectFieldType: 'user',
+    targetStartField: '',
+    targetEndField: '',
+    exportForecastDates: true,
     exportRankChanges: true,
     exportForecastArchitects: false,
   };

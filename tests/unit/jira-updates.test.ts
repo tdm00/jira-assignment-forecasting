@@ -6,7 +6,10 @@ import { AUTO_ASSIGN } from '../../src/core/types';
 import { parseJiraCsv } from '../../src/parsers/jiraCsv';
 import {
   buildJiraScript,
+  commentText,
+  defaultNote,
   normalizeBaseUrl,
+  planUpdates,
   shellQuote,
   type ScriptSettings,
 } from '../../src/state/jiraScript';
@@ -20,6 +23,8 @@ const SETTINGS: ScriptSettings = {
   slaDaysField: 'customfield_20001',
   architectField: 'customfield_20002',
   architectFieldType: 'user',
+  targetStartField: 'customfield_20003',
+  targetEndField: 'customfield_20004',
   exportRankChanges: true,
 };
 
@@ -37,12 +42,13 @@ function applyMoves(order: string[], moves: ReturnType<typeof rankMoves>): strin
   return next;
 }
 
-function changesFor(state = testState()) {
+/** Forecast dates are left out unless asked for, to keep the other cases short. */
+function changesFor(state = testState(), dates = false) {
   return jiraChanges({
     items: state.items,
     staff: state.staff,
     scheduled: schedule(state),
-    settings: state.settings,
+    settings: { ...state.settings, exportForecastDates: dates },
   });
 }
 
@@ -140,6 +146,27 @@ describe('detecting changes (REQ-JIRA-001, REQ-JIRA-002, REQ-JIRA-003)', () => {
     expect(changesFor(state).map((c) => c.kind)).toEqual(['storyPoints', 'rank']);
   });
 
+  it('sets target start and end to the forecast where they differ (REQ-JIRA-011)', () => {
+    let state = testState({
+      items: [
+        item({ key: 'D-1', slaDays: 3, startDate: '2026-11-09', endDate: '2026-11-20' }),
+        item({ key: 'D-2', slaDays: 2 }),
+        item({ key: 'D-3', status: 'Done', startDate: '2026-10-01', endDate: '2026-10-02' }),
+        item({ key: 'D-4', slaDays: null, storyPoints: null }),
+      ],
+    });
+    state = reducer(state, { type: 'addStaff', names: ['Alice Chen'] });
+    expect(changesFor(state, true)).toEqual([
+      { kind: 'targetEnd', key: 'D-1', from: '2026-11-20', to: '2026-11-11' },
+      { kind: 'targetStart', key: 'D-2', from: null, to: '2026-11-12' },
+      { kind: 'targetEnd', key: 'D-2', from: null, to: '2026-11-13' },
+    ]);
+    state = { ...state, settings: testSettings({ exportForecastDates: false }) };
+    expect(jiraChanges({ ...state, scheduled: schedule(state), settings: state.settings })).toEqual(
+      [],
+    );
+  });
+
   it('stores Jira usernames on staff', () => {
     let state = reducer(testState(), { type: 'addStaff', names: ['Alice Chen'] });
     const id = state.staff[0]!.id;
@@ -150,46 +177,97 @@ describe('detecting changes (REQ-JIRA-001, REQ-JIRA-002, REQ-JIRA-003)', () => {
   });
 });
 
-describe('curl script (REQ-JIRA-005 to REQ-JIRA-009)', () => {
+describe('curl script (REQ-JIRA-005 to REQ-JIRA-009, REQ-JIRA-012)', () => {
   const alice = { id: 's1', name: 'Alice Chen', jiraUsername: 'achen' };
   const changes: JiraChange[] = [
     { kind: 'storyPoints', key: 'A-1', from: 5, to: 8 },
+    { kind: 'targetEnd', key: 'A-1', from: '2026-11-13', to: '2026-11-16' },
     { kind: 'slaDays', key: 'A-2', from: 2, to: null },
     { kind: 'architect', key: 'B-1', from: 'Bob Martinez', to: alice },
+    { kind: 'targetStart', key: 'B-1', from: null, to: '2026-11-09' },
     { kind: 'rank', key: 'U-1', before: 'A-1' },
     { kind: 'rank', key: 'B-1', after: 'U-1' },
   ];
   const now = new Date('2026-10-18T12:00:00Z');
+  const note = 'Based on a meeting on October 20, 2026, these fields changed:';
   const commandLines = (text: string) => text.split('\n').filter((l) => l.startsWith('curl '));
+  const script = (c = changes, s: Partial<ScriptSettings> = {}, n: string | null = note) =>
+    buildJiraScript(
+      planUpdates(c, { ...SETTINGS, ...s }),
+      { ...SETTINGS, ...s },
+      {
+        now,
+        source: 'jira.csv',
+        note: n,
+      },
+    );
 
-  it('writes one curl command per change using the PAT variable', () => {
-    const script = buildJiraScript(changes, SETTINGS, { now, source: 'jira.csv' });
-    expect(script.commands).toBe(5);
-    expect(script.skipped).toEqual([]);
-    const lines = commandLines(script.text);
+  it('groups field changes into one update per issue', () => {
+    const plan = planUpdates(changes, SETTINGS);
+    expect(plan.issues.map((i) => [i.key, i.fields])).toEqual([
+      ['A-1', { customfield_10002: 8, customfield_20004: '2026-11-16' }],
+      ['A-2', { customfield_20001: null }],
+      ['B-1', { customfield_20002: { name: 'achen' }, customfield_20003: '2026-11-09' }],
+    ]);
+    expect(plan.ranks.map((r) => r.key)).toEqual(['U-1', 'B-1']);
+    expect(plan.skipped).toEqual([]);
+  });
+
+  it('writes one line per issue that updates fields and then comments', () => {
+    const lines = commandLines(script());
     expect(lines).toHaveLength(5);
     for (const line of lines) {
       expect(line).toContain(`-H "Authorization: Bearer $JIRA_PAT"`);
       expect(line).toContain(`-H 'Content-Type: application/json'`);
     }
-    expect(lines[0]).toBe(
-      `curl -sS -X PUT 'https://jira.pncint.net/rest/api/2/issue/A-1' ` +
+    const [update, comment] = lines[0]!.split(' && ');
+    expect(update).toBe(
+      `curl -sS --fail-with-body -X PUT 'https://jira.pncint.net/rest/api/2/issue/A-1' ` +
         `-H "Authorization: Bearer $JIRA_PAT" -H 'Content-Type: application/json' ` +
-        `--data '{"fields":{"customfield_10002":8}}' ` +
-        `-w 'A-1 story points 5 to 8 -> HTTP %{http_code}\\n'`,
+        `--data '{"fields":{"customfield_10002":8,"customfield_20004":"2026-11-16"}}' ` +
+        `-w 'A-1 Story points: 5 to 8; Target end: 2026-11-13 to 2026-11-16 -> HTTP %{http_code}\\n'`,
+    );
+    expect(comment).toBe(
+      `curl -sS -o /dev/null -X POST 'https://jira.pncint.net/rest/api/2/issue/A-1/comment' ` +
+        `-H "Authorization: Bearer $JIRA_PAT" -H 'Content-Type: application/json' ` +
+        `--data '${JSON.stringify({
+          body: `${note}\n\n* Story points: 5 to 8\n* Target end: 2026-11-13 to 2026-11-16`,
+        })}' -w 'A-1 comment added -> HTTP %{http_code}\\n'`,
     );
     expect(lines[1]).toContain(`--data '{"fields":{"customfield_20001":null}}'`);
-    expect(lines[2]).toContain(`--data '{"fields":{"customfield_20002":{"name":"achen"}}}'`);
+    expect(lines[1]).toContain(String.raw`* SLA days: 2 to blank`);
+    expect(lines[2]).toContain(
+      String.raw`* Architect: Bob Martinez to Alice Chen\n* Target start: blank to 2026-11-09`,
+    );
     expect(lines[3]).toContain(`'https://jira.pncint.net/rest/agile/1.0/issue/rank'`);
     expect(lines[3]).toContain(`--data '{"issues":["U-1"],"rankBeforeIssue":"A-1"}'`);
+    expect(lines[3]).not.toContain('comment');
     expect(lines[4]).toContain(`--data '{"issues":["B-1"],"rankAfterIssue":"U-1"}'`);
   });
 
-  it('starts with usage notes and a check that the PAT is set', () => {
-    const { text } = buildJiraScript(changes, SETTINGS, { now, source: 'jira.csv' });
-    const lines = text.split('\n');
-    expect(lines[0]).toBe('#!/bin/bash');
+  it('leaves the comment out when there is no note', () => {
+    const lines = commandLines(script(changes, {}, null));
+    expect(lines.some((l) => l.includes('/comment'))).toBe(false);
+    const blank = commandLines(script(changes, {}, '  '));
+    expect(blank[0]).toContain(
+      `{"body":"* Story points: 5 to 8\\n* Target end: 2026-11-13 to 2026-11-16"}`,
+    );
+  });
+
+  it('builds the comment text and default note', () => {
+    const points = { kind: 'storyPoints', key: 'A-1', from: 5, to: 8 } as const;
+    expect(commentText(' Note \n', [points])).toBe('Note\n\n* Story points: 5 to 8');
+    expect(defaultNote(new Date(2026, 9, 20))).toBe(
+      'Based on a meeting on October 20, 2026, the following fields of this Jira issue changed:',
+    );
+  });
+
+  it('starts with usage notes, the note and a check that the PAT is set', () => {
+    const text = script();
+    expect(text.split('\n')[0]).toBe('#!/bin/bash');
     expect(text).toContain('# Jira export: jira.csv');
+    expect(text).toContain('# 3 issues to update and 2 rank moves, one curl line each.');
+    expect(text).toContain(`# Comment note:\n#   ${note}`);
     expect(text).toContain("#   export JIRA_PAT='your-personal-access-token'");
     expect(text).toContain(
       ': "${JIRA_PAT:?Set JIRA_PAT to your Jira personal access token first}"',
@@ -198,36 +276,48 @@ describe('curl script (REQ-JIRA-005 to REQ-JIRA-009)', () => {
   });
 
   it('sends select and text architect fields by name', () => {
-    const one = [changes[2]!];
-    const select = buildJiraScript(one, { ...SETTINGS, architectFieldType: 'select' });
-    expect(select.text).toContain(`{"fields":{"customfield_20002":{"value":"Alice Chen"}}}`);
-    const text = buildJiraScript(one, { ...SETTINGS, architectFieldType: 'text' });
-    expect(text.text).toContain(`{"fields":{"customfield_20002":"Alice Chen"}}`);
+    const one = [changes[3]!];
+    expect(script(one, { architectFieldType: 'select' })).toContain(
+      `{"fields":{"customfield_20002":{"value":"Alice Chen"}}}`,
+    );
+    expect(script(one, { architectFieldType: 'text' })).toContain(
+      `{"fields":{"customfield_20002":"Alice Chen"}}`,
+    );
   });
 
   it('leaves out changes it cannot send and says why', () => {
-    const script = buildJiraScript(
-      [...changes, { kind: 'architect', key: 'Z-1', from: '', to: { id: 's2', name: 'Bo' } }],
-      { ...SETTINGS, slaDaysField: ' ', exportRankChanges: false },
-    );
-    expect(script.commands).toBe(2);
-    expect(script.skipped.map((s) => s.reason)).toEqual([
-      'no SLA days field id in Settings',
+    const all: JiraChange[] = [
+      ...changes,
+      { kind: 'architect', key: 'Z-1', from: '', to: { id: 's2', name: 'Bo' } },
+    ];
+    const settings = {
+      ...SETTINGS,
+      slaDaysField: ' ',
+      targetStartField: '',
+      exportRankChanges: false,
+    };
+    const plan = planUpdates(all, settings);
+    expect(plan.issues.map((i) => i.key)).toEqual(['A-1', 'B-1']);
+    expect(plan.issues[1]!.changes.map((c) => c.kind)).toEqual(['architect']);
+    expect(plan.skipped.map((s) => s.reason)).toEqual([
+      'no field id for SLA days in Settings',
+      'no field id for Target start in Settings',
       'rank changes are turned off in Settings',
       'rank changes are turned off in Settings',
       'no Jira username for Bo in Settings',
     ]);
-    expect(script.text).toContain('#   A-2 SLA days 2 to blank: no SLA days field id in Settings');
+    const text = buildJiraScript(plan, settings, { note });
+    expect(text).toContain('#   A-2 SLA days: 2 to blank (no field id for SLA days in Settings)');
+    expect(commandLines(text)[1]).not.toContain('Target start');
   });
 
   it('quotes values safely for the shell and curl', () => {
     const obrien = { id: 's3', name: "Pat O'Brien 100%" };
-    const { text } = buildJiraScript([{ kind: 'architect', key: 'Q-1', from: '', to: obrien }], {
-      ...SETTINGS,
+    const text = script([{ kind: 'architect', key: 'Q-1', from: '', to: obrien }], {
       architectFieldType: 'text',
     });
     expect(text).toContain(`--data '{"fields":{"customfield_20002":"Pat O'\\''Brien 100%"}}'`);
-    expect(text).toContain(`-w 'Q-1 architect unassigned to Pat O'\\''Brien 100%% -> HTTP`);
+    expect(text).toContain(`-w 'Q-1 Architect: unassigned to Pat O'\\''Brien 100%% -> HTTP`);
     expect(shellQuote("it's")).toBe(`'it'\\''s'`);
   });
 
@@ -250,6 +340,9 @@ describe('older saved sessions', () => {
       architectFieldType: 'user',
       exportRankChanges: true,
       exportForecastArchitects: false,
+      exportForecastDates: true,
+      targetStartField: '',
+      targetEndField: '',
     });
   });
 });

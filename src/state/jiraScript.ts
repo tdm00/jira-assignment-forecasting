@@ -1,4 +1,4 @@
-import type { JiraChange } from '../core/jiraChanges';
+import type { FieldChange, JiraChange, RankChange } from '../core/jiraChanges';
 import type { Settings } from '../core/types';
 
 export const PAT_VARIABLE = 'JIRA_PAT';
@@ -10,6 +10,8 @@ export type ScriptSettings = Pick<
   | 'slaDaysField'
   | 'architectField'
   | 'architectFieldType'
+  | 'targetStartField'
+  | 'targetEndField'
   | 'exportRankChanges'
 >;
 
@@ -18,12 +20,34 @@ export interface SkippedChange {
   reason: string;
 }
 
-export interface JiraScript {
-  text: string;
-  /** Number of curl commands in the script. */
-  commands: number;
+/** All field changes for one issue, sent as a single update. */
+export interface IssueUpdate {
+  key: string;
+  fields: Record<string, unknown>;
+  changes: FieldChange[];
+}
+
+export interface UpdatePlan {
+  issues: IssueUpdate[];
+  ranks: RankChange[];
   skipped: SkippedChange[];
 }
+
+const FIELD_LABELS: Record<FieldChange['kind'], string> = {
+  storyPoints: 'Story points',
+  slaDays: 'SLA days',
+  architect: 'Architect',
+  targetStart: 'Target start',
+  targetEnd: 'Target end',
+};
+
+const FIELD_SETTINGS = {
+  storyPoints: 'storyPointsField',
+  slaDays: 'slaDaysField',
+  architect: 'architectField',
+  targetStart: 'targetStartField',
+  targetEnd: 'targetEndField',
+} as const satisfies Record<FieldChange['kind'], keyof ScriptSettings>;
 
 export function normalizeBaseUrl(raw: string): string {
   const url = raw.trim().replace(/\/+$/, '');
@@ -41,9 +65,9 @@ function writeOutText(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/%/g, '%%');
 }
 
-function curl(method: string, url: string, body: unknown, label: string): string {
+function curl(method: string, url: string, body: unknown, label: string, extra = ''): string {
   return [
-    `curl -sS -X ${method} ${shellQuote(url)}`,
+    `curl -sS${extra} -X ${method} ${shellQuote(url)}`,
     `-H "Authorization: Bearer $${PAT_VARIABLE}"`,
     `-H 'Content-Type: application/json'`,
     `--data ${shellQuote(JSON.stringify(body))}`,
@@ -51,116 +75,155 @@ function curl(method: string, url: string, body: unknown, label: string): string
   ].join(' ');
 }
 
-const show = (n: number | null) => (n === null ? 'blank' : String(n));
+const show = (v: string | number | null) => (v === null || v === '' ? 'blank' : String(v));
+
+/** `Story points: 5 to 8` */
+export function describeField(change: FieldChange): string {
+  const label = FIELD_LABELS[change.kind];
+  if (change.kind === 'architect') {
+    return `${label}: ${change.from || 'unassigned'} to ${change.to.name}`;
+  }
+  return `${label}: ${show(change.from)} to ${show(change.to)}`;
+}
 
 function describe(change: JiraChange): string {
-  switch (change.kind) {
-    case 'storyPoints':
-      return `${change.key} story points ${show(change.from)} to ${show(change.to)}`;
-    case 'slaDays':
-      return `${change.key} SLA days ${show(change.from)} to ${show(change.to)}`;
-    case 'architect':
-      return `${change.key} architect ${change.from || 'unassigned'} to ${change.to.name}`;
-    case 'rank':
-      return change.after
-        ? `${change.key} rank after ${change.after}`
-        : `${change.key} rank before ${change.before}`;
-  }
+  if (change.kind !== 'rank') return `${change.key} ${describeField(change)}`;
+  return change.after
+    ? `${change.key} rank after ${change.after}`
+    : `${change.key} rank before ${change.before}`;
 }
 
-function fieldUpdate(
-  change: JiraChange,
+export function defaultNote(date: Date = new Date()): string {
+  const when = date.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  return `Based on a meeting on ${when}, the following fields of this Jira issue changed:`;
+}
+
+/** The note followed by one bullet per changed field, in Jira wiki markup. */
+export function commentText(note: string, changes: FieldChange[]): string {
+  const bullets = changes.map((c) => `* ${describeField(c)}`);
+  return note.trim() ? [note.trim(), '', ...bullets].join('\n') : bullets.join('\n');
+}
+
+function fieldValue(
+  change: FieldChange,
   s: ScriptSettings,
-): { field: string; value: unknown } | { reason: string } {
-  switch (change.kind) {
-    case 'storyPoints':
-      return s.storyPointsField.trim()
-        ? { field: s.storyPointsField.trim(), value: change.to }
-        : { reason: 'no story points field id in Settings' };
-    case 'slaDays':
-      return s.slaDaysField.trim()
-        ? { field: s.slaDaysField.trim(), value: change.to }
-        : { reason: 'no SLA days field id in Settings' };
-    case 'architect': {
-      const field = s.architectField.trim();
-      if (!field) return { reason: 'no architect field id in Settings' };
-      if (s.architectFieldType === 'select') return { field, value: { value: change.to.name } };
-      if (s.architectFieldType === 'text') return { field, value: change.to.name };
-      const username = change.to.jiraUsername?.trim();
-      return username
-        ? { field, value: { name: username } }
-        : { reason: `no Jira username for ${change.to.name} in Settings` };
-    }
-    case 'rank':
-      return { reason: 'rank changes are turned off in Settings' };
-  }
+): { value: unknown } | { reason: string } {
+  if (change.kind !== 'architect') return { value: change.to };
+  if (s.architectFieldType === 'select') return { value: { value: change.to.name } };
+  if (s.architectFieldType === 'text') return { value: change.to.name };
+  const username = change.to.jiraUsername?.trim();
+  return username
+    ? { value: { name: username } }
+    : { reason: `no Jira username for ${change.to.name} in Settings` };
 }
 
-export function buildJiraScript(
-  changes: JiraChange[],
-  settings: ScriptSettings,
-  opts: { now?: Date; source?: string | null } = {},
-): JiraScript {
-  const base = normalizeBaseUrl(settings.jiraBaseUrl);
-  const commands: string[] = [];
+export function planUpdates(changes: JiraChange[], settings: ScriptSettings): UpdatePlan {
+  const byKey = new Map<string, IssueUpdate>();
+  const ranks: RankChange[] = [];
   const skipped: SkippedChange[] = [];
-
   for (const change of changes) {
     if (change.kind === 'rank') {
-      if (!settings.exportRankChanges) {
-        skipped.push({ change, reason: 'rank changes are turned off in Settings' });
-        continue;
-      }
-      const body = change.after
-        ? { issues: [change.key], rankAfterIssue: change.after }
-        : { issues: [change.key], rankBeforeIssue: change.before };
-      commands.push(curl('PUT', `${base}/rest/agile/1.0/issue/rank`, body, describe(change)));
+      if (settings.exportRankChanges) ranks.push(change);
+      else skipped.push({ change, reason: 'rank changes are turned off in Settings' });
       continue;
     }
-    const update = fieldUpdate(change, settings);
-    if ('reason' in update) {
-      skipped.push({ change, reason: update.reason });
+    const field = settings[FIELD_SETTINGS[change.kind]].trim();
+    if (!field) {
+      skipped.push({ change, reason: `no field id for ${FIELD_LABELS[change.kind]} in Settings` });
       continue;
     }
-    commands.push(
-      curl(
-        'PUT',
-        `${base}/rest/api/2/issue/${encodeURIComponent(change.key)}`,
-        { fields: { [update.field]: update.value } },
-        describe(change),
-      ),
-    );
+    const value = fieldValue(change, settings);
+    if ('reason' in value) {
+      skipped.push({ change, reason: value.reason });
+      continue;
+    }
+    const issue = byKey.get(change.key) ?? { key: change.key, fields: {}, changes: [] };
+    issue.fields[field] = value.value;
+    issue.changes.push(change);
+    byKey.set(change.key, issue);
   }
+  return { issues: [...byKey.values()], ranks, skipped };
+}
 
+/**
+ * One line per issue: update its fields and, only when that succeeds, add the
+ * comment. Rank moves follow, one line each, and must run in order.
+ */
+export function buildJiraScript(
+  plan: UpdatePlan,
+  settings: ScriptSettings,
+  opts: { now?: Date; source?: string | null; note?: string | null } = {},
+): string {
+  const base = normalizeBaseUrl(settings.jiraBaseUrl);
+  const withComment = opts.note !== null && opts.note !== undefined;
+
+  const issueLines = plan.issues.map((issue) => {
+    const update = curl(
+      'PUT',
+      `${base}/rest/api/2/issue/${encodeURIComponent(issue.key)}`,
+      { fields: issue.fields },
+      `${issue.key} ${issue.changes.map(describeField).join('; ')}`,
+      ' --fail-with-body',
+    );
+    if (!withComment) return update;
+    const comment = curl(
+      'POST',
+      `${base}/rest/api/2/issue/${encodeURIComponent(issue.key)}/comment`,
+      { body: commentText(opts.note!, issue.changes) },
+      `${issue.key} comment added`,
+      ' -o /dev/null',
+    );
+    return `${update} && ${comment}`;
+  });
+  const rankLines = plan.ranks.map((r) =>
+    curl(
+      'PUT',
+      `${base}/rest/agile/1.0/issue/rank`,
+      r.after
+        ? { issues: [r.key], rankAfterIssue: r.after }
+        : { issues: [r.key], rankBeforeIssue: r.before },
+      describe(r),
+    ),
+  );
+
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const noteLines = withComment && opts.note!.trim() ? opts.note!.trim().split('\n') : [];
   const header = [
     '#!/bin/bash',
     `# Jira updates from Jira Gantt Forecaster, generated ${(opts.now ?? new Date()).toISOString()}`,
     ...(opts.source ? [`# Jira export: ${opts.source}`] : []),
     `# Server: ${base}`,
-    `# ${commands.length} update${commands.length === 1 ? '' : 's'}, one curl command per line.`,
+    `# ${plural(plan.issues.length, 'issue')} to update and ${plural(plan.ranks.length, 'rank move')}, one curl line each.`,
+    ...(withComment
+      ? [
+          '# Each issue update is followed by a comment listing its changed fields (from and to).',
+          ...(noteLines.length ? ['# Comment note:', ...noteLines.map((l) => `#   ${l}`)] : []),
+        ]
+      : []),
     '#',
-    '# Run it from a macOS Terminal with your Jira personal access token:',
+    '# Run it from a macOS Terminal (needs curl 7.76 or later, macOS 12+) with your token:',
     `#   export ${PAT_VARIABLE}='your-personal-access-token'`,
     '#   bash this-file.sh',
-    '# Or paste the curl lines into the terminal. Keep them in order: rank moves build on',
-    '# the ones before them. Each line prints the change and its HTTP status (204 = done).',
+    '# Or paste the curl lines into the terminal in order: rank moves build on the ones',
+    '# before them. Each line prints what it changed and the HTTP status',
+    '# (204 = fields updated, 201 = comment added).',
     '#',
-    '# List field ids to configure Settings > Jira update script:',
+    '# List field ids to configure Settings > Jira update file:',
     `#   curl -sS -H "Authorization: Bearer $${PAT_VARIABLE}" ${shellQuote(`${base}/rest/api/2/field`)}`,
-    ...(skipped.length
+    ...(plan.skipped.length
       ? [
           '#',
-          `# Not included (${skipped.length}):`,
-          ...skipped.map((s) => `#   ${describe(s.change)}: ${s.reason}`),
+          `# Not included (${plan.skipped.length}):`,
+          ...plan.skipped.map((s) => `#   ${describe(s.change)} (${s.reason})`),
         ]
       : []),
     '',
     `: "\${${PAT_VARIABLE}:?Set ${PAT_VARIABLE} to your Jira personal access token first}"`,
   ];
 
-  return {
-    text: [...header, ...commands, ''].join('\n'),
-    commands: commands.length,
-    skipped,
-  };
+  return [...header, ...issueLines, ...rankLines, ''].join('\n');
 }

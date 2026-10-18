@@ -77,9 +77,9 @@ export function Header(p: Props) {
           className="btn btn--header"
           onClick={p.onExportJira}
           disabled={!p.hasItems}
-          title="Download a curl script that applies your changes to Jira"
+          title="Download a curl script that applies your changes to Jira and comments on each issue"
         >
-          <DownloadIcon /> Export Jira updates
+          <DownloadIcon /> Jira update file
         </button>
         <button type="button" className="btn btn--header" onClick={p.onClear}>
           <TrashIcon /> Clear all

@@ -10,13 +10,25 @@ interface Props {
   dispatch: Dispatch<Action>;
 }
 
-type TextSetting = 'jiraBaseUrl' | 'storyPointsField' | 'slaDaysField' | 'architectField';
+type TextSetting =
+  | 'jiraBaseUrl'
+  | 'storyPointsField'
+  | 'slaDaysField'
+  | 'architectField'
+  | 'targetStartField'
+  | 'targetEndField';
 
 const TEXT_FIELDS: { key: TextSetting; label: string; placeholder: string }[] = [
   { key: 'jiraBaseUrl', label: 'Jira server', placeholder: 'https://jira.example.com' },
   { key: 'storyPointsField', label: 'Story points field id', placeholder: 'customfield_10002' },
   { key: 'slaDaysField', label: 'SLA days field id', placeholder: 'customfield_12345' },
   { key: 'architectField', label: 'Architect field id', placeholder: 'customfield_12346' },
+  { key: 'targetStartField', label: 'Target start field id', placeholder: 'customfield_12347' },
+  {
+    key: 'targetEndField',
+    label: 'Target end field id',
+    placeholder: 'customfield_12348 or duedate',
+  },
 ];
 
 export function JiraUpdatePanel({ settings, staff, dispatch }: Props) {
@@ -25,12 +37,14 @@ export function JiraUpdatePanel({ settings, staff, dispatch }: Props) {
   return (
     <section className="panel" aria-labelledby="jira-update-heading">
       <h2 id="jira-update-heading" className="panel__title">
-        Jira update script
+        Jira update file
       </h2>
       <p className="hint">
-        <strong>Export Jira updates</strong> downloads a script with one curl command per change
-        (story points, SLA, architect and plan order). It authenticates with the personal access
-        token in <code>${PAT_VARIABLE}</code>. Changes for a blank field id are left out.
+        <strong>Jira update file</strong> downloads a script with one curl line per issue that
+        updates its story points, SLA, architect and target dates and adds a comment with your
+        meeting notes and each change. Plan order is written as rank moves. It authenticates with
+        the personal access token in <code>${PAT_VARIABLE}</code>. Changes for a blank field id are
+        left out.
       </p>
       <div className="stack-form">
         {TEXT_FIELDS.map((f) => (
@@ -58,6 +72,14 @@ export function JiraUpdatePanel({ settings, staff, dispatch }: Props) {
             <option value="select">Select list (architect name)</option>
             <option value="text">Text (architect name)</option>
           </select>
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={settings.exportForecastDates}
+            onChange={(e) => update({ exportForecastDates: e.target.checked })}
+          />
+          <span>Set target start and end to the forecast dates</span>
         </label>
         <label className="check">
           <input

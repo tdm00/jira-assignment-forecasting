@@ -23,8 +23,9 @@ will start and finish.
 - **Search and filter** by summary, one or more architects, and one or more crews.
 - **Saved automatically** in the browser, with project export/import (JSON) and plan
   export (CSV).
-- **Write changes back to Jira.** Export a curl script with one command per change
-  (story points, SLA, architect, plan order) that uses your Jira personal access token.
+- **Write changes back to Jira.** Create a Jira update file: a curl script that uses your
+  Jira personal access token to update story points, SLA, architect, target start and end,
+  and plan order, and comments on each issue with your meeting notes and every change.
 
 ## Using the app
 
@@ -68,12 +69,15 @@ are in [docs/requirements/08-scheduling-forecast.md](docs/requirements/08-schedu
 
 ### Writing changes back to Jira
 
-1. In **Settings > Jira update script**, check the Jira server (default
-   `https://jira.pncint.net`) and enter the field ids for story points, SLA days and
-   architect. List them with
+1. In **Settings > Jira update file**, check the Jira server (default
+   `https://jira.pncint.net`) and enter the field ids for story points, SLA days,
+   architect, target start and target end (`duedate` works for the Jira due date). List
+   them with
    `curl -sS -H "Authorization: Bearer $JIRA_PAT" https://jira.pncint.net/rest/api/2/field`.
    For a user picker architect field, enter each architect's Jira username.
-2. Click **Export Jira updates** to download `jira-updates-YYYY-MM-DD.sh`.
+2. Click **Jira update file**. Edit the meeting notes (they start as "Based on a meeting
+   on <today>, the following fields of this Jira issue changed:") and click **Download
+   update file** to save `jira-updates-YYYY-MM-DD.sh`.
 3. In a macOS Terminal:
 
    ```bash
@@ -81,8 +85,9 @@ are in [docs/requirements/08-scheduling-forecast.md](docs/requirements/08-schedu
    bash ~/Downloads/jira-updates-YYYY-MM-DD.sh
    ```
 
-   Or paste the `curl` lines one at a time, in order. Each prints the change and its
-   HTTP status (`204` means done). Details in
+   Or paste the `curl` lines one at a time, in order. Each issue's line updates its
+   fields and then adds a comment with your notes and each field's from and to values.
+   Lines print the change and HTTP status (`204` updated, `201` comment added). Details in
    [docs/requirements/15-jira-update-script.md](docs/requirements/15-jira-update-script.md).
 
 ## Development

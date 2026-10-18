@@ -2,22 +2,27 @@ import { sortByRank } from './rank';
 import { normalizeName } from './scheduler';
 import {
   AUTO_ASSIGN,
+  type IsoDate,
   type JiraItem,
   type ScheduledItem,
   type Settings,
   type StaffMember,
 } from './types';
 
-export type JiraChange =
+export type RankChange = { kind: 'rank'; key: string; after?: string; before?: string };
+
+export type FieldChange =
   | { kind: 'storyPoints' | 'slaDays'; key: string; from: number | null; to: number | null }
   | { kind: 'architect'; key: string; from: string; to: StaffMember }
-  | { kind: 'rank'; key: string; after?: string; before?: string };
+  | { kind: 'targetStart' | 'targetEnd'; key: string; from: IsoDate | null; to: IsoDate };
+
+export type JiraChange = FieldChange | RankChange;
 
 export interface ChangeInput {
   items: JiraItem[];
   staff: StaffMember[];
   scheduled: Map<string, ScheduledItem>;
-  settings: Pick<Settings, 'exportForecastArchitects'>;
+  settings: Pick<Settings, 'exportForecastArchitects' | 'exportForecastDates'>;
 }
 
 function targetArchitect(
@@ -61,11 +66,11 @@ function longestIncreasing(seq: number[]): Set<number> {
  * order, is ranked right after its new predecessor (or before the first
  * unmoved item when it is now first), so the moves must run in sequence.
  */
-export function rankMoves(items: JiraItem[]): Extract<JiraChange, { kind: 'rank' }>[] {
+export function rankMoves(items: JiraItem[]): RankChange[] {
   const original = new Map(sortByRank(items).map((item, idx) => [item.key, idx]));
   const stable = longestIncreasing(items.map((i) => original.get(i.key)!));
   const firstStable = items.find((_, idx) => stable.has(idx))?.key;
-  const moves: Extract<JiraChange, { kind: 'rank' }>[] = [];
+  const moves: RankChange[] = [];
   items.forEach((item, idx) => {
     if (stable.has(idx)) return;
     moves.push(
@@ -77,7 +82,10 @@ export function rankMoves(items: JiraItem[]): Extract<JiraChange, { kind: 'rank'
   return moves;
 }
 
-/** Edits made in the app that differ from the imported Jira data, field edits first in plan order. */
+/**
+ * Edits made in the app that differ from the imported Jira data, plus forecast
+ * dates that differ from Jira's start and end. Field changes come first in plan order.
+ */
 export function jiraChanges({ items, staff, scheduled, settings }: ChangeInput): JiraChange[] {
   const changes: JiraChange[] = [];
   for (const item of items) {
@@ -94,14 +102,19 @@ export function jiraChanges({ items, staff, scheduled, settings }: ChangeInput):
         changes.push({ kind: 'slaDays', key: item.key, from: item.jira.slaDays, to: item.slaDays });
       }
     }
-    const to = targetArchitect(
-      item,
-      scheduled.get(item.key),
-      staff,
-      settings.exportForecastArchitects,
-    );
+    const s = scheduled.get(item.key);
+    const to = targetArchitect(item, s, staff, settings.exportForecastArchitects);
     if (to && normalizeName(to.name) !== normalizeName(item.architect)) {
       changes.push({ kind: 'architect', key: item.key, from: item.architect.trim(), to });
+    }
+    const open = s?.state === 'planned' || s?.state === 'in-progress';
+    if (settings.exportForecastDates && open && s.start && s.end) {
+      if (s.start !== item.startDate) {
+        changes.push({ kind: 'targetStart', key: item.key, from: item.startDate, to: s.start });
+      }
+      if (s.end !== item.endDate) {
+        changes.push({ kind: 'targetEnd', key: item.key, from: item.endDate, to: s.end });
+      }
     }
   }
   return [...changes, ...rankMoves(items)];

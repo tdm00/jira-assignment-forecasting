@@ -66,6 +66,10 @@ export interface Settings {
   slaDaysField: string;
   architectField: string;
   architectFieldType: ArchitectFieldType;
+  targetStartField: string;
+  targetEndField: string;
+  /** Write forecast start and end to the target start and end fields. */
+  exportForecastDates: boolean;
   exportRankChanges: boolean;
   /** Also write architects picked by crew pools or auto-assign, not only grid overrides. */
   exportForecastArchitects: boolean;
