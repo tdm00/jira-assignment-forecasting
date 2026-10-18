@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../src/App';
+import { defaultNote } from '../../src/state/jiraScript';
 import { STORAGE_KEY } from '../../src/state/persistence';
 import { fixture, testState } from '../helpers';
 
@@ -270,6 +271,78 @@ describe('persistence and export', () => {
     expect(project.app).toBe('jira-gantt-forecaster');
     expect(project.data.items).toHaveLength(4);
     expect(await created[1]!.text()).toContain('Forecast End');
+  });
+
+  it('creates a Jira update file with meeting notes as comments (REQ-JIRA-001, REQ-JIRA-005, REQ-JIRA-010, REQ-JIRA-012)', async () => {
+    const created: Blob[] = [];
+    URL.createObjectURL = vi.fn((b: Blob) => {
+      created.push(b);
+      return 'blob:test';
+    }) as typeof URL.createObjectURL;
+    URL.revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const user = await setup();
+    const updateFile = () => user.click(screen.getByRole('button', { name: /Jira update file/ }));
+
+    await user.click(screen.getByRole('tab', { name: 'Settings' }));
+    expect(screen.getByTestId('jira-jiraBaseUrl')).toHaveValue('https://jira.pncint.net');
+    await user.click(screen.getByLabelText('Set target start and end to the forecast dates'));
+    await updateFile();
+    expect(screen.getByText('No changes to send to Jira')).toBeInTheDocument();
+
+    await user.clear(screen.getByTestId('sp-A-1'));
+    await user.type(screen.getByTestId('sp-A-1'), '8');
+    await user.clear(screen.getByTestId('sla-B-1'));
+    await user.type(screen.getByTestId('sla-B-1'), '7');
+    await updateFile();
+    expect(screen.getByText(/No Jira updates to export: 2 left out/)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await user.type(screen.getByTestId('jira-storyPointsField'), 'customfield_10002');
+    await user.click(screen.getByLabelText('Set target start and end to the forecast dates'));
+    await user.type(screen.getByTestId('jira-targetEndField'), 'duedate');
+    await updateFile();
+    const dialog = screen.getByRole('dialog', { name: 'Create Jira update file' });
+    const notes = within(dialog).getByLabelText('Meeting notes');
+    expect(notes).toHaveValue(defaultNote());
+    expect(within(dialog).getByTestId('update-summary')).toHaveTextContent(
+      /4 issues will be updated\. \d+ changes cannot be sent yet/,
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(click).not.toHaveBeenCalled();
+
+    await updateFile();
+    await user.clear(screen.getByLabelText('Meeting notes'));
+    await user.type(screen.getByLabelText('Meeting notes'), 'Based on a meeting on October 20');
+    expect(screen.getByTestId('comment-preview')).toHaveTextContent(
+      'Based on a meeting on October 20 * Story points: 5 to 8 * Target end: 2026-11-30 to 2026-11-12',
+    );
+    await user.click(screen.getByRole('button', { name: 'Download update file' }));
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const text = await created[0]!.text();
+    const curls = text.split('\n').filter((l) => l.startsWith('curl '));
+    expect(curls).toHaveLength(4);
+    expect(curls[0]).toContain(`'https://jira.pncint.net/rest/api/2/issue/A-1'`);
+    expect(curls[0]).toContain(`{"fields":{"customfield_10002":8,"duedate":"2026-11-12"}}`);
+    expect(curls[0]).toContain(
+      `{"body":"Based on a meeting on October 20\\n\\n* Story points: 5 to 8\\n* Target end: 2026-11-30 to 2026-11-12"}`,
+    );
+    expect(curls[0]).toContain('Bearer $JIRA_PAT');
+    expect(text).toContain('#   B-1 SLA days: 5 to 7 (no field id for SLA days in Settings)');
+    expect(
+      screen.getByText(/Jira update file downloaded: 4 issues, \d+ left out/),
+    ).toBeInTheDocument();
+  });
+
+  it('asks for Jira usernames when the architect field is a user picker (REQ-JIRA-007)', async () => {
+    const user = await setup();
+    await user.click(screen.getByRole('tab', { name: 'Settings' }));
+    expect(screen.queryByLabelText('Jira username for Alice Chen')).not.toBeInTheDocument();
+    await user.type(screen.getByTestId('jira-architectField'), 'customfield_1');
+    await user.type(screen.getByLabelText('Jira username for Alice Chen'), 'achen');
+    expect(screen.getByLabelText('Jira username for Alice Chen')).toHaveValue('achen');
   });
 
   it('opens an exported project file (REQ-PER-004)', async () => {

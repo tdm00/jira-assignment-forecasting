@@ -19,6 +19,7 @@ interface Props {
   onOpenProject: (files: NamedText[]) => void;
   onExportProject: () => void;
   onExportCsv: () => void;
+  onExportJira: () => void;
   onClear: () => void;
   hasItems: boolean;
 }
@@ -70,6 +71,15 @@ export function Header(p: Props) {
           disabled={!p.hasItems}
         >
           <DownloadIcon /> Export CSV
+        </button>
+        <button
+          type="button"
+          className="btn btn--header"
+          onClick={p.onExportJira}
+          disabled={!p.hasItems}
+          title="Download a curl script that applies your changes to Jira and comments on each issue"
+        >
+          <DownloadIcon /> Jira update file
         </button>
         <button type="button" className="btn btn--header" onClick={p.onClear}>
           <TrashIcon /> Clear all

@@ -139,6 +139,29 @@ test.describe('forecasting workflow', () => {
     expect(readFileSync((await csv.path())!, 'utf8')).toContain('Forecast End');
   });
 
+  test('creates a Jira update file with a meeting comment (REQ-JIRA-005, REQ-JIRA-010, REQ-JIRA-012)', async ({
+    page,
+  }) => {
+    await page.getByTestId('sp-A-1').fill('13');
+    await page.getByRole('tab', { name: 'Settings' }).click();
+    await page.getByTestId('jira-storyPointsField').fill('customfield_10002');
+    await page.getByRole('button', { name: 'Jira update file' }).click();
+    await page.getByLabel('Meeting notes').fill('Based on a meeting on October 20');
+    const [script] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Download update file' }).click(),
+    ]);
+    expect(script.suggestedFilename()).toMatch(/^jira-updates-.*\.sh$/);
+    const text = readFileSync((await script.path())!, 'utf8');
+    expect(text).toContain(
+      `curl -sS --fail-with-body -X PUT 'https://jira.pncint.net/rest/api/2/issue/A-1' -H "Authorization: Bearer $JIRA_PAT"`,
+    );
+    expect(text).toContain(`{"fields":{"customfield_10002":13}}`);
+    expect(text).toContain(
+      `{"body":"Based on a meeting on October 20\\n\\n* Story points: 5 to 13"}`,
+    );
+  });
+
   test('restores the session after reload (REQ-PER-002)', async ({ page }) => {
     await page.getByTestId('sla-B-1').fill('1');
     await page.reload();

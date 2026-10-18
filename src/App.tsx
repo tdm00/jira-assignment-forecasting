@@ -10,6 +10,7 @@ import { DropZone } from './components/DropZone';
 import { FilterBar, type Zoom } from './components/FilterBar';
 import { Header } from './components/Header';
 import { JiraGrid } from './components/JiraGrid';
+import { JiraUpdateDialog } from './components/JiraUpdateDialog';
 import { Sidebar } from './components/Sidebar';
 import { SummaryStats } from './components/SummaryStats';
 import { Toasts, type Toast } from './components/Toasts';
@@ -36,10 +37,12 @@ import {
   itemsForArchitectCrews,
   itemsInSchedule,
 } from './core/focus';
+import { jiraChanges } from './core/jiraChanges';
 import { schedule, summarize, type ScheduleInput } from './core/scheduler';
 import type { Filters } from './core/types';
 import { SAMPLE_FILES } from './sample';
 import { importFiles, type NamedText } from './state/importFile';
+import { buildJiraScript, defaultNote, planUpdates, type UpdatePlan } from './state/jiraScript';
 import {
   clearSaved,
   downloadFile,
@@ -96,6 +99,7 @@ export default function App({ initial, storage = safeStorage() }: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [theme, setTheme] = useState<Theme>(() => initialTheme(storage));
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [jiraPlan, setJiraPlan] = useState<UpdatePlan | null>(null);
   const toastId = useRef(0);
   const storageWarned = useRef(false);
 
@@ -304,6 +308,27 @@ export default function App({ initial, storage = safeStorage() }: Props) {
           );
           notify('Plan exported as CSV', 'success');
         }}
+        onExportJira={() => {
+          const changes = jiraChanges({
+            items: state.items,
+            staff: state.staff,
+            scheduled: fullScheduled,
+            settings: state.settings,
+          });
+          if (!changes.length) {
+            notify('No changes to send to Jira', 'info');
+            return;
+          }
+          const plan = planUpdates(changes, state.settings);
+          if (!plan.issues.length && !plan.ranks.length) {
+            notify(
+              `No Jira updates to export: ${plan.skipped.length} left out (see Settings > Jira update file)`,
+              'warning',
+            );
+            return;
+          }
+          setJiraPlan(plan);
+        }}
         onClear={() => {
           if (window.confirm('Clear all staff, vacations, closures and Jira items?')) {
             dispatch({ type: 'clearAll' });
@@ -434,6 +459,32 @@ export default function App({ initial, storage = safeStorage() }: Props) {
           )}
         </main>
       </div>
+      {jiraPlan && (
+        <JiraUpdateDialog
+          plan={jiraPlan}
+          defaultNote={defaultNote()}
+          onCancel={() => setJiraPlan(null)}
+          onConfirm={(note) => {
+            const text = buildJiraScript(jiraPlan, state.settings, {
+              source: state.jiraFileName,
+              note,
+            });
+            downloadFile(`jira-updates-${stamp}.sh`, text, 'text/x-shellscript');
+            const { issues, ranks, skipped } = jiraPlan;
+            const parts = [
+              `${issues.length} issue${issues.length === 1 ? '' : 's'}`,
+              ...(ranks.length
+                ? [`${ranks.length} rank move${ranks.length === 1 ? '' : 's'}`]
+                : []),
+            ];
+            notify(
+              `Jira update file downloaded: ${parts.join(', ')}${skipped.length ? `, ${skipped.length} left out (see Settings > Jira update file)` : ''}`,
+              skipped.length ? 'warning' : 'success',
+            );
+            setJiraPlan(null);
+          }}
+        />
+      )}
       <Toasts toasts={toasts} onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))} />
     </div>
   );

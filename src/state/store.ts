@@ -29,6 +29,7 @@ export type ItemPatch = Partial<Pick<JiraItem, 'storyPoints' | 'slaDays' | 'arch
 export type Action =
   | { type: 'addStaff'; names: string[] }
   | { type: 'removeStaff'; id: string }
+  | { type: 'setStaffUsername'; id: string; username: string }
   | { type: 'addVacations'; vacations: Omit<Vacation, 'id'>[] }
   | { type: 'removeVacation'; id: string }
   | { type: 'addClosures'; closures: Omit<Closure, 'id'>[] }
@@ -66,6 +67,16 @@ export function defaultSettings(): Settings {
     assignmentMode: 'jira',
     poolPolicy: 'primary-preferred',
     backupThresholdDays: 5,
+    jiraBaseUrl: 'https://jira.pncint.net',
+    storyPointsField: '',
+    slaDaysField: '',
+    architectField: '',
+    architectFieldType: 'user',
+    targetStartField: '',
+    targetEndField: '',
+    exportForecastDates: true,
+    exportRankChanges: true,
+    exportForecastArchitects: false,
   };
 }
 
@@ -146,6 +157,18 @@ export function reducer(state: AppState, action: Action): AppState {
         items: state.items.map((i) =>
           i.architectOverride === action.id ? { ...i, architectOverride: null } : i,
         ),
+      };
+    case 'setStaffUsername':
+      return {
+        ...state,
+        staff: state.staff.map((s) => {
+          if (s.id !== action.id) return s;
+          const next: StaffMember = { ...s };
+          const username = action.username.trim();
+          if (username) next.jiraUsername = username;
+          else delete next.jiraUsername;
+          return next;
+        }),
       };
     case 'addVacations': {
       const key = (v: Omit<Vacation, 'id'>) => `${v.staffId}|${v.start}|${v.end}`;

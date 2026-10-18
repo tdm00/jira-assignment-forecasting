@@ -4,6 +4,8 @@ export type IsoDate = string;
 export interface StaffMember {
   id: string;
   name: string;
+  /** Jira login used when the architect field is a user picker. */
+  jiraUsername?: string;
 }
 
 export interface Vacation {
@@ -37,6 +39,8 @@ export interface JiraItem {
   rank: string;
   /** Position in the original file, used as a rank tie-breaker. */
   fileIndex: number;
+  /** Estimates as imported from Jira; edits are measured against these. */
+  jira?: { storyPoints: number | null; slaDays: number | null };
 }
 
 export const AUTO_ASSIGN = '__auto__';
@@ -55,7 +59,24 @@ export interface Settings {
   poolPolicy: PoolPolicy;
   /** Business days a backup must start sooner than the primary to take the item. */
   backupThresholdDays: number;
+  /** Jira server that the update script targets, for example `https://jira.example.com`. */
+  jiraBaseUrl: string;
+  /** Jira field ids (for example `customfield_10002`); blank skips that kind of change. */
+  storyPointsField: string;
+  slaDaysField: string;
+  architectField: string;
+  architectFieldType: ArchitectFieldType;
+  targetStartField: string;
+  targetEndField: string;
+  /** Write forecast start and end to the target start and end fields. */
+  exportForecastDates: boolean;
+  exportRankChanges: boolean;
+  /** Also write architects picked by crew pools or auto-assign, not only grid overrides. */
+  exportForecastArchitects: boolean;
 }
+
+/** How the architect value is sent: user picker `{name}`, select list `{value}` or plain text. */
+export type ArchitectFieldType = 'user' | 'select' | 'text';
 
 export type PoolRole = 1 | 2 | 3;
 
