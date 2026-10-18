@@ -360,6 +360,45 @@ select {
   font-weight: 650;
 }
 
+.panel + .panel {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.hint code {
+  font-size: 12px;
+}
+
+.username-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.username-list legend {
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.username-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.username-row .input {
+  padding: 5px 8px;
+}
+
 .count-badge {
   display: inline-grid;
   place-items: center;

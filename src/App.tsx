@@ -36,10 +36,12 @@ import {
   itemsForArchitectCrews,
   itemsInSchedule,
 } from './core/focus';
+import { jiraChanges } from './core/jiraChanges';
 import { schedule, summarize, type ScheduleInput } from './core/scheduler';
 import type { Filters } from './core/types';
 import { SAMPLE_FILES } from './sample';
 import { importFiles, type NamedText } from './state/importFile';
+import { buildJiraScript } from './state/jiraScript';
 import {
   clearSaved,
   downloadFile,
@@ -303,6 +305,31 @@ export default function App({ initial, storage = safeStorage() }: Props) {
             'text/csv',
           );
           notify('Plan exported as CSV', 'success');
+        }}
+        onExportJira={() => {
+          const changes = jiraChanges({
+            items: state.items,
+            staff: state.staff,
+            scheduled: fullScheduled,
+            settings: state.settings,
+          });
+          if (!changes.length) {
+            notify('No changes to send to Jira', 'info');
+            return;
+          }
+          const script = buildJiraScript(changes, state.settings, { source: state.jiraFileName });
+          const left = script.skipped.length
+            ? `${script.skipped.length} left out (see Settings > Jira update script)`
+            : '';
+          if (!script.commands) {
+            notify(`No Jira updates exported: ${left}`, 'warning');
+            return;
+          }
+          downloadFile(`jira-updates-${stamp}.sh`, script.text, 'text/x-shellscript');
+          notify(
+            `Jira update script exported with ${script.commands} command${script.commands === 1 ? '' : 's'}${left ? `, ${left}` : ''}`,
+            left ? 'warning' : 'success',
+          );
         }}
         onClear={() => {
           if (window.confirm('Clear all staff, vacations, closures and Jira items?')) {

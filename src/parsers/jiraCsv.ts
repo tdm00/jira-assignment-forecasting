@@ -36,6 +36,8 @@ export function parseJiraCsv(text: string): JiraParseResult {
     seen.add(key);
     const sp = parseNumber(get(row, 'storyPoints'));
     const sla = parseNumber(get(row, 'slaDays'));
+    const storyPoints = sp !== null && sp >= 0 ? sp : null;
+    const slaDays = sla !== null && sla >= 0 ? sla : null;
     items.push({
       key,
       summary: get(row, 'summary'),
@@ -43,12 +45,13 @@ export function parseJiraCsv(text: string): JiraParseResult {
       architect: get(row, 'architect'),
       architectOverride: null,
       status: get(row, 'status'),
-      storyPoints: sp !== null && sp >= 0 ? sp : null,
-      slaDays: sla !== null && sla >= 0 ? sla : null,
+      storyPoints,
+      slaDays,
       startDate: parseDate(get(row, 'startDate')),
       endDate: parseDate(get(row, 'endDate')),
       rank: get(row, 'rank'),
       fileIndex: i,
+      jira: { storyPoints, slaDays },
     });
   });
 

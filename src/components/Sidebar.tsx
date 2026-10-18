@@ -4,6 +4,7 @@ import type { Action, AppState } from '../state/store';
 import { CrewPanel } from './CrewPanel';
 import { DataPanel } from './DataPanel';
 import { HolidayPanel } from './HolidayPanel';
+import { JiraUpdatePanel } from './JiraUpdatePanel';
 import { SettingsPanel } from './SettingsPanel';
 import { StaffPanel } from './StaffPanel';
 import { VacationPanel } from './VacationPanel';
@@ -59,7 +60,12 @@ export function Sidebar({ state, dispatch, onFiles, onLoadSample }: Props) {
         {tab === 'crews' && <CrewPanel state={state} dispatch={dispatch} />}
         {tab === 'vacations' && <VacationPanel state={state} dispatch={dispatch} />}
         {tab === 'closures' && <HolidayPanel state={state} dispatch={dispatch} />}
-        {tab === 'settings' && <SettingsPanel settings={state.settings} dispatch={dispatch} />}
+        {tab === 'settings' && (
+          <>
+            <SettingsPanel settings={state.settings} dispatch={dispatch} />
+            <JiraUpdatePanel settings={state.settings} staff={state.staff} dispatch={dispatch} />
+          </>
+        )}
       </div>
     </aside>
   );

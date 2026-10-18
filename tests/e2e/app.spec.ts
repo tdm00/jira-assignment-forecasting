@@ -139,6 +139,22 @@ test.describe('forecasting workflow', () => {
     expect(readFileSync((await csv.path())!, 'utf8')).toContain('Forecast End');
   });
 
+  test('exports a Jira curl script for edits (REQ-JIRA-005, REQ-JIRA-010)', async ({ page }) => {
+    await page.getByTestId('sp-A-1').fill('13');
+    await page.getByRole('tab', { name: 'Settings' }).click();
+    await page.getByTestId('jira-storyPointsField').fill('customfield_10002');
+    const [script] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Export Jira updates' }).click(),
+    ]);
+    expect(script.suggestedFilename()).toMatch(/^jira-updates-.*\.sh$/);
+    const text = readFileSync((await script.path())!, 'utf8');
+    expect(text).toContain(
+      `curl -sS -X PUT 'https://jira.pncint.net/rest/api/2/issue/A-1' -H "Authorization: Bearer $JIRA_PAT"`,
+    );
+    expect(text).toContain(`{"fields":{"customfield_10002":13}}`);
+  });
+
   test('restores the session after reload (REQ-PER-002)', async ({ page }) => {
     await page.getByTestId('sla-B-1').fill('1');
     await page.reload();

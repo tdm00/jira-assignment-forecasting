@@ -272,6 +272,53 @@ describe('persistence and export', () => {
     expect(await created[1]!.text()).toContain('Forecast End');
   });
 
+  it('exports edits as a Jira curl script (REQ-JIRA-001, REQ-JIRA-005, REQ-JIRA-010)', async () => {
+    const created: Blob[] = [];
+    URL.createObjectURL = vi.fn((b: Blob) => {
+      created.push(b);
+      return 'blob:test';
+    }) as typeof URL.createObjectURL;
+    URL.revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const user = await setup();
+    const exportJira = () =>
+      user.click(screen.getByRole('button', { name: /Export Jira updates/ }));
+
+    await exportJira();
+    expect(screen.getByText('No changes to send to Jira')).toBeInTheDocument();
+
+    await user.clear(screen.getByTestId('sp-A-1'));
+    await user.type(screen.getByTestId('sp-A-1'), '8');
+    await user.clear(screen.getByTestId('sla-B-1'));
+    await user.type(screen.getByTestId('sla-B-1'), '7');
+    await exportJira();
+    expect(screen.getByText(/No Jira updates exported: 2 left out/)).toBeInTheDocument();
+    expect(click).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('tab', { name: 'Settings' }));
+    expect(screen.getByTestId('jira-jiraBaseUrl')).toHaveValue('https://jira.pncint.net');
+    await user.type(screen.getByTestId('jira-storyPointsField'), 'customfield_10002');
+    await exportJira();
+    expect(click).toHaveBeenCalledTimes(1);
+    const text = await created[0]!.text();
+    const curls = text.split('\n').filter((l) => l.startsWith('curl '));
+    expect(curls).toHaveLength(1);
+    expect(curls[0]).toContain(`'https://jira.pncint.net/rest/api/2/issue/A-1'`);
+    expect(curls[0]).toContain(`{"fields":{"customfield_10002":8}}`);
+    expect(curls[0]).toContain('Bearer $JIRA_PAT');
+    expect(text).toContain('#   B-1 SLA days 5 to 7: no SLA days field id in Settings');
+    expect(screen.getByText(/exported with 1 command, 1 left out/)).toBeInTheDocument();
+  });
+
+  it('asks for Jira usernames when the architect field is a user picker (REQ-JIRA-007)', async () => {
+    const user = await setup();
+    await user.click(screen.getByRole('tab', { name: 'Settings' }));
+    expect(screen.queryByLabelText('Jira username for Alice Chen')).not.toBeInTheDocument();
+    await user.type(screen.getByTestId('jira-architectField'), 'customfield_1');
+    await user.type(screen.getByLabelText('Jira username for Alice Chen'), 'achen');
+    expect(screen.getByLabelText('Jira username for Alice Chen')).toHaveValue('achen');
+  });
+
   it('opens an exported project file (REQ-PER-004)', async () => {
     const user = userEvent.setup();
     const state = testState({ staff: [{ id: 's1', name: 'Zara' }] });

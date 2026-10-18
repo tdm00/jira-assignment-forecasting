@@ -23,6 +23,8 @@ will start and finish.
 - **Search and filter** by summary, one or more architects, and one or more crews.
 - **Saved automatically** in the browser, with project export/import (JSON) and plan
   export (CSV).
+- **Write changes back to Jira.** Export a curl script with one command per change
+  (story points, SLA, architect, plan order) that uses your Jira personal access token.
 
 ## Using the app
 
@@ -63,6 +65,25 @@ are in [docs/requirements/08-scheduling-forecast.md](docs/requirements/08-schedu
 - **Architect focus:** switch from **Team** to **Architect focus**, choose an architect
   and toggle crew chips. Details in
   [docs/requirements/14-crew-pools-and-scenarios.md](docs/requirements/14-crew-pools-and-scenarios.md).
+
+### Writing changes back to Jira
+
+1. In **Settings > Jira update script**, check the Jira server (default
+   `https://jira.pncint.net`) and enter the field ids for story points, SLA days and
+   architect. List them with
+   `curl -sS -H "Authorization: Bearer $JIRA_PAT" https://jira.pncint.net/rest/api/2/field`.
+   For a user picker architect field, enter each architect's Jira username.
+2. Click **Export Jira updates** to download `jira-updates-YYYY-MM-DD.sh`.
+3. In a macOS Terminal:
+
+   ```bash
+   export JIRA_PAT='your-personal-access-token'
+   bash ~/Downloads/jira-updates-YYYY-MM-DD.sh
+   ```
+
+   Or paste the `curl` lines one at a time, in order. Each prints the change and its
+   HTTP status (`204` means done). Details in
+   [docs/requirements/15-jira-update-script.md](docs/requirements/15-jira-update-script.md).
 
 ## Development
 

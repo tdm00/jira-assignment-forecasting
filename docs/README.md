@@ -24,6 +24,7 @@ edited, and the Gantt chart updates instantly.
 | 12  | [Testing strategy](requirements/12-testing-strategy.md)                 | `REQ-TST`               |
 | 13  | [Build and CI](requirements/13-build-and-ci.md)                         | `REQ-CI`                |
 | 14  | [Crew pools and scenarios](requirements/14-crew-pools-and-scenarios.md) | `REQ-POOL`, `REQ-FOCUS` |
+| 15  | [Jira update script](requirements/15-jira-update-script.md)             | `REQ-JIRA`              |
 
 Example input files live in [sample-data/](sample-data/).
 
