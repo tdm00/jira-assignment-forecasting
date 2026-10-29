@@ -1,5 +1,6 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { NamedText } from '../state/importFile';
+import { APP_VERSION } from '../version';
 import { readFiles } from './DropZone';
 import {
   ChartIcon,
@@ -26,6 +27,9 @@ interface Props {
 
 export function Header(p: Props) {
   const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    document.title = `Jira Gantt Forecaster ${APP_VERSION}`;
+  }, []);
   return (
     <header className="app-header">
       <button
@@ -43,7 +47,16 @@ export function Header(p: Props) {
         </span>
         <div>
           <h1 className="brand__title">Jira Gantt Forecaster</h1>
-          <p className="brand__subtitle">Architect capacity forecasting</p>
+          <p className="brand__subtitle">
+            Architect capacity forecasting{' '}
+            <span
+              className="brand__version"
+              data-testid="app-version"
+              title={`Build ${APP_VERSION}`}
+            >
+              {APP_VERSION}
+            </span>
+          </p>
         </div>
       </div>
       <div className="app-header__actions">

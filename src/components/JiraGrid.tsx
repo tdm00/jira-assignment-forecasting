@@ -19,7 +19,7 @@ import { Fragment, memo, useMemo, type Dispatch } from 'react';
 import { endDelta, formatDelta, type Reference, type ReferenceEntry } from '../core/compare';
 import { sortStaffByName } from '../core/filters';
 import { crewStats } from '../core/focus';
-import { crewKey, normalizeName } from '../core/scheduler';
+import { architectLabel, crewKey, normalizeName } from '../core/scheduler';
 import {
   AUTO_ASSIGN,
   type FlagCode,
@@ -153,10 +153,7 @@ const SortableRow = memo(function SortableRow(p: RowProps) {
     transition,
   };
 
-  const jiraMatch = staff.find((x) => normalizeName(x.name) === normalizeName(item.architect));
-  const jiraLabel = item.architect.trim()
-    ? `${item.architect}${jiraMatch ? '' : ' (not in staff)'}`
-    : 'Unassigned';
+  const jiraLabel = architectLabel(item.architect, staff);
 
   const note = assignNote(s, item.architect);
 

@@ -1,5 +1,5 @@
 import { useMemo, useState, type Dispatch } from 'react';
-import { normalizeName } from '../core/scheduler';
+import { findStaffMember, normalizeName } from '../core/scheduler';
 import type { Action, AppState } from '../state/store';
 import { staffColor } from '../utils/colors';
 import { TrashIcon, UserIcon } from './icons';
@@ -14,11 +14,10 @@ export function StaffPanel({ state, dispatch }: Props) {
   const { staff, items, vacations } = state;
 
   const missingFromJira = useMemo(() => {
-    const known = new Set(staff.map((s) => normalizeName(s.name)));
     const out = new Map<string, string>();
     for (const i of items) {
       const n = i.architect.trim();
-      if (n && !known.has(normalizeName(n))) out.set(normalizeName(n), n);
+      if (n && !findStaffMember(staff, n)) out.set(normalizeName(n), n);
     }
     return [...out.values()];
   }, [staff, items]);
@@ -78,7 +77,19 @@ export function StaffPanel({ state, dispatch }: Props) {
           return (
             <li key={s.id} className="list__item">
               <span className="dot" style={{ background: staffColor(staff, s.id) }} />
-              <span className="list__main">{s.name}</span>
+              <span className="list__main">
+                {s.name}
+                <input
+                  className="input staff-username"
+                  value={s.jiraUsername ?? ''}
+                  placeholder="Jira username"
+                  spellCheck={false}
+                  aria-label={`Jira username for ${s.name}`}
+                  onChange={(e) =>
+                    dispatch({ type: 'setStaffUsername', id: s.id, username: e.target.value })
+                  }
+                />
+              </span>
               {vacCount > 0 && (
                 <span className="chip" title="Vacations">
                   {vacCount} vac

@@ -163,6 +163,11 @@ select {
   opacity: 0.8;
 }
 
+.brand__version {
+  margin-left: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
 .app-header__actions {
   margin-left: auto;
   display: flex;
@@ -575,6 +580,12 @@ select {
 
 .list__main small {
   color: var(--text-2);
+  font-size: 12px;
+}
+
+.staff-username {
+  margin-top: 4px;
+  padding: 4px 8px;
   font-size: 12px;
 }
 

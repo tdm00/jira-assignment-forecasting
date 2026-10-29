@@ -20,6 +20,24 @@ export function normalizeName(name: string): string {
   return name.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+/** Staff member named by a Jira architect value: display name, or Jira username such as PK17152. */
+export function findStaffMember(staff: StaffMember[], value: string): StaffMember | undefined {
+  const key = normalizeName(value);
+  if (!key) return undefined;
+  return (
+    staff.find((x) => normalizeName(x.name) === key) ??
+    staff.find((x) => x.jiraUsername !== undefined && normalizeName(x.jiraUsername) === key)
+  );
+}
+
+/** Default grid label for the architect stored on the Jira item. */
+export function architectLabel(architect: string, staff: StaffMember[]): string {
+  const value = architect.trim();
+  if (!value) return 'Unassigned';
+  const match = findStaffMember(staff, value);
+  return match ? match.name : `${value} (not in staff)`;
+}
+
 function statusIn(status: string, list: string[]): boolean {
   const s = normalizeName(status);
   return list.some((x) => normalizeName(x) === s);
@@ -51,8 +69,7 @@ export function resolveArchitect(
   }
   const name = item.architect.trim();
   if (!name) return autoAssign ? { kind: 'auto' } : { kind: 'none' };
-  const key = normalizeName(name);
-  const s = staff.find((x) => normalizeName(x.name) === key);
+  const s = findStaffMember(staff, name);
   return s ? { kind: 'staff', staff: s } : { kind: 'unknown', name };
 }
 

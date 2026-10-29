@@ -123,12 +123,25 @@ describe('parseJiraCsv', () => {
   it('requires a key column', () => {
     expect(() => parseJiraCsv('Summary\nfoo')).toThrow(/Issue key/);
   });
+
+  it('reads Assignee as the architect and prefers an Architect column', () => {
+    expect(parseJiraCsv('Issue key,Summary,Assignee\nA-1,One,PK17152').items[0]).toMatchObject({
+      architect: 'PK17152',
+    });
+    expect(parseJiraCsv('Issue key,Summary,Assignee Id\nA-1,One,PK17152').items[0]).toMatchObject({
+      architect: 'PK17152',
+    });
+    expect(
+      parseJiraCsv('Issue key,Summary,Architect,Assignee\nA-1,One,Alice Chen,PK17152').items[0],
+    ).toMatchObject({ architect: 'Alice Chen' });
+  });
 });
 
 describe('parseStaffCsv', () => {
   it('reads a staff column and removes duplicates', () => {
     expect(parseStaffCsv('Name,Email\nAlice,a@x\n alice ,b@x\n,\nBob,c@x')).toEqual({
       names: ['Alice', 'Bob'],
+      usernames: ['', ''],
       skipped: 1,
     });
   });
@@ -142,7 +155,15 @@ describe('parseStaffCsv', () => {
     expect(parseStaffCsv('Team,Architect\nX,Carla').names).toEqual(['Carla']);
   });
   it('handles empty input', () => {
-    expect(parseStaffCsv('')).toEqual({ names: [], skipped: 0 });
+    expect(parseStaffCsv('')).toEqual({ names: [], usernames: [], skipped: 0 });
+  });
+  it('reads an optional Jira username column', () => {
+    expect(parseStaffCsv('Name,Assignee\nAlice Chen,PK17152\nBob,')).toEqual({
+      names: ['Alice Chen', 'Bob'],
+      usernames: ['PK17152', ''],
+      skipped: 0,
+    });
+    expect(parseStaffCsv('Name,Jira Username\nAlice,pk17152').usernames).toEqual(['pk17152']);
   });
 });
 
