@@ -40,11 +40,11 @@ export function importText(
         };
       }
       case 'staff': {
-        const { names, skipped } = parseStaffCsv(text);
+        const { names, usernames, skipped } = parseStaffCsv(text);
         if (!names.length) return fail(`${fileName}: no staff names found`);
         return {
           kind,
-          actions: [{ type: 'addStaff', names }],
+          actions: [{ type: 'addStaff', names, usernames }],
           message: `${fileName}: loaded ${plural(names.length, 'staff member')}${skippedNote(skipped)}`,
           level: 'success',
         };

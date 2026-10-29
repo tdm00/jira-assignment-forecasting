@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { moveItem } from '../../src/core/rank';
 import {
+  architectLabel,
   estimateDays,
   resolveArchitect,
   schedule,
@@ -66,6 +67,28 @@ describe('resolveArchitect (REQ-STF-006)', () => {
       name: 'Zed',
     });
     expect(resolveArchitect(item({ architect: '' }), [alice], false)).toEqual({ kind: 'none' });
+  });
+  it('matches a Jira username and does not auto-assign that id away', () => {
+    const pk: StaffMember = { id: 'alice', name: 'Alice Chen', jiraUsername: 'pk17152' };
+    expect(resolveArchitect(item({ architect: 'PK17152' }), [pk, bob], true)).toEqual({
+      kind: 'staff',
+      staff: pk,
+    });
+    const scheduled = run([item({ key: 'A-9', architect: 'PK17152', slaDays: 1 })], {
+      staff: [pk, bob],
+    });
+    expect(scheduled.get('A-9')).toMatchObject({
+      architect: 'Alice Chen',
+      staffId: 'alice',
+      suggested: false,
+      assignedVia: 'jira',
+    });
+    expect(architectLabel('PK17152', [pk, bob])).toBe('Alice Chen');
+    expect(architectLabel('ZZ999', [pk])).toBe('ZZ999 (not in staff)');
+    expect(architectLabel('', [pk])).toBe('Unassigned');
+  });
+  it('still auto-assigns a blank architect', () => {
+    expect(resolveArchitect(item({ architect: '  ' }), [alice], true)).toEqual({ kind: 'auto' });
   });
 });
 

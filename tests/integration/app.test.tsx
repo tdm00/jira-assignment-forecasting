@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../src/App';
 import { defaultNote } from '../../src/state/jiraScript';
 import { STORAGE_KEY } from '../../src/state/persistence';
+import { APP_VERSION } from '../../src/version';
 import { fixture, testState } from '../helpers';
 
 const csv = (name: string) => new File([fixture(name)], name, { type: 'text/csv' });
@@ -27,6 +28,15 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe('app version', () => {
+  it('shows the build version in the header and document title', () => {
+    render(<App initial={testState()} />);
+    expect(APP_VERSION).toMatch(/^[0-9a-f]{8,}$/i);
+    expect(screen.getByTestId('app-version')).toHaveTextContent(APP_VERSION);
+    expect(document.title).toBe(`Jira Gantt Forecaster ${APP_VERSION}`);
+  });
 });
 
 describe('empty state (REQ-UX-002, REQ-OVR-005)', () => {

@@ -1,7 +1,7 @@
 import { todayIso } from '../core/calendar';
 import { moveItem, moveWithinVisible, sortByRank } from '../core/rank';
 import type { Baseline } from '../core/compare';
-import { crewKey, normalizeName } from '../core/scheduler';
+import { crewKey, findStaffMember, normalizeName } from '../core/scheduler';
 import type {
   Closure,
   CrewAssignment,
@@ -27,7 +27,7 @@ export interface AppState {
 export type ItemPatch = Partial<Pick<JiraItem, 'storyPoints' | 'slaDays' | 'architectOverride'>>;
 
 export type Action =
-  | { type: 'addStaff'; names: string[] }
+  | { type: 'addStaff'; names: string[]; usernames?: string[] }
   | { type: 'removeStaff'; id: string }
   | { type: 'setStaffUsername'; id: string; username: string }
   | { type: 'addVacations'; vacations: Omit<Vacation, 'id'>[] }
@@ -112,12 +112,11 @@ export function assignSlot(
 
 /** Each crew's most frequent Jira architect (that is in the staff list) becomes its primary. */
 export function seedPools(state: AppState): CrewAssignment[] {
-  const byName = new Map(state.staff.map((s) => [normalizeName(s.name), s] as const));
   const order = new Map(state.staff.map((s, i) => [s.id, i] as const));
   const counts = new Map<string, { name: string; perStaff: Map<string, number> }>();
   for (const item of state.items) {
     const key = crewKey(item.crew);
-    const member = byName.get(normalizeName(item.architect));
+    const member = findStaffMember(state.staff, item.architect);
     if (!key || !member) continue;
     const row = counts.get(key) ?? { name: item.crew.trim(), perStaff: new Map() };
     row.perStaff.set(member.id, (row.perStaff.get(member.id) ?? 0) + 1);
@@ -137,16 +136,34 @@ export function seedPools(state: AppState): CrewAssignment[] {
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'addStaff': {
-      const known = new Set(state.staff.map((s) => normalizeName(s.name)));
+      const known = new Map(state.staff.map((s) => [normalizeName(s.name), s]));
       const added: StaffMember[] = [];
-      for (const raw of action.names) {
+      let staff = state.staff;
+      let changed = false;
+      action.names.forEach((raw, i) => {
         const name = raw.replace(/\s+/g, ' ').trim();
         const key = normalizeName(name);
-        if (!name || known.has(key)) continue;
-        known.add(key);
-        added.push({ id: makeId('staff'), name });
-      }
-      return added.length ? { ...state, staff: [...state.staff, ...added] } : state;
+        const username = (action.usernames?.[i] ?? '').replace(/\s+/g, ' ').trim();
+        if (!name) return;
+        const existing = known.get(key);
+        if (existing) {
+          if (username && existing.jiraUsername !== username) {
+            const next = { ...existing, jiraUsername: username };
+            staff = staff.map((s) => (s.id === existing.id ? next : s));
+            const addedIdx = added.findIndex((s) => s.id === existing.id);
+            if (addedIdx >= 0) added[addedIdx] = next;
+            known.set(key, next);
+            changed = true;
+          }
+          return;
+        }
+        const member: StaffMember = { id: makeId('staff'), name };
+        if (username) member.jiraUsername = username;
+        known.set(key, member);
+        added.push(member);
+      });
+      if (!added.length && !changed) return state;
+      return { ...state, staff: [...staff, ...added] };
     }
     case 'removeStaff':
       return {

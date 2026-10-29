@@ -2,31 +2,31 @@
 
 ## Supported files
 
-| Type         | Detected when the header row contains                                                              | Example                                           |
-| ------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| Jira export  | `Issue key` / `Key` **and** `Summary`                                                              | [jira-export.csv](../sample-data/jira-export.csv) |
-| Vacations    | a person column (`Staff`, `Architect`, `Person`, `Employee`, `Staff Member`) **and** a date column | [vacations.csv](../sample-data/vacations.csv)     |
-| Closures     | a date column (`Date`, `Start Date`, `Start`) and no person column                                 | [closures.csv](../sample-data/closures.csv)       |
-| Staff list   | a person column or `Name`, with no date column; or a plain list with one name per line             | [staff.csv](../sample-data/staff.csv)             |
-| Crew pools   | a crew column (`Crew`, `Team`, `Squad`), a person column (or `Name`) **and** a `Role` column       | [crew-pools.csv](../sample-data/crew-pools.csv)   |
-| Project file | a `.json` file previously exported by the app                                                      | -                                                 |
+| Type         | Detected when the header row contains                                                                                                                                                           | Example                                           |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| Jira export  | `Issue key` / `Key` **and** `Summary`                                                                                                                                                           | [jira-export.csv](../sample-data/jira-export.csv) |
+| Vacations    | a person column (`Staff`, `Architect`, `Person`, `Employee`, `Staff Member`) **and** a date column                                                                                              | [vacations.csv](../sample-data/vacations.csv)     |
+| Closures     | a date column (`Date`, `Start Date`, `Start`) and no person column                                                                                                                              | [closures.csv](../sample-data/closures.csv)       |
+| Staff list   | a person column or `Name`, with no date column; or a plain list with one name per line. An optional `Jira Username`, `Username`, `Assignee`, or `User Id` column sets each person's Jira login. | [staff.csv](../sample-data/staff.csv)             |
+| Crew pools   | a crew column (`Crew`, `Team`, `Squad`), a person column (or `Name`) **and** a `Role` column                                                                                                    | [crew-pools.csv](../sample-data/crew-pools.csv)   |
+| Project file | a `.json` file previously exported by the app                                                                                                                                                   | -                                                 |
 
 Header matching ignores case, punctuation and the Jira `Custom field ( ... )` wrapper.
 
 ## Jira column mapping
 
-| Field               | Accepted headers                                                      |
-| ------------------- | --------------------------------------------------------------------- |
-| Jira key            | `Issue key`, `Key`, `Jira Key`                                        |
-| Summary             | `Summary`, `Task Summary`                                             |
-| Crew                | `Crew`, `Crew Assigned`, `Team`, `Squad`                              |
-| Architect           | `Architect`, `Architect Assigned`, `Solution Architect`               |
-| Status              | `Status`                                                              |
-| Story points        | `Story Points`, `Story Point`, `Story Point Estimate`, `Points`, `SP` |
-| SLA (business days) | `SLA`, `SLA Days`, `SLA Days to Complete`, `SLA of Days to Complete`  |
-| Start date          | `Start Date`, `Start`, `Target Start`                                 |
-| End date            | `End Date`, `End`, `Due Date`, `Due`, `Target End`                    |
-| Rank                | `Rank`                                                                |
+| Field               | Accepted headers                                                                   |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| Jira key            | `Issue key`, `Key`, `Jira Key`                                                     |
+| Summary             | `Summary`, `Task Summary`                                                          |
+| Crew                | `Crew`, `Crew Assigned`, `Team`, `Squad`                                           |
+| Architect           | `Architect`, `Architect Assigned`, `Solution Architect`, `Assignee`, `Assignee Id` |
+| Status              | `Status`                                                                           |
+| Story points        | `Story Points`, `Story Point`, `Story Point Estimate`, `Points`, `SP`              |
+| SLA (business days) | `SLA`, `SLA Days`, `SLA Days to Complete`, `SLA of Days to Complete`               |
+| Start date          | `Start Date`, `Start`, `Target Start`                                              |
+| End date            | `End Date`, `End`, `Due Date`, `Due`, `Target End`                                 |
+| Rank                | `Rank`                                                                             |
 
 Accepted date formats: `YYYY-MM-DD` (optionally followed by a time), `M/D/YYYY`,
 `M/D/YY`, and the Jira format `DD/Mon/YY` (for example `15/Jan/26 9:00 AM`).

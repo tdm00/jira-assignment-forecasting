@@ -1,7 +1,13 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import { appRevision } from './scripts/app-revision.ts';
+
+const appVersion = appRevision();
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
   plugins: [react()],
   test: {
     environment: 'jsdom',

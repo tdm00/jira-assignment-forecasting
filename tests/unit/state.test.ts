@@ -42,6 +42,19 @@ describe('reducer', () => {
     expect(reducer(s, { type: 'addStaff', names: ['carla'] })).toBe(s);
   });
 
+  it('stores Jira usernames from a staff import', () => {
+    let s = reducer(testState(), {
+      type: 'addStaff',
+      names: ['Alice Chen'],
+      usernames: ['PK17152'],
+    });
+    expect(s.staff[0]).toMatchObject({ name: 'Alice Chen', jiraUsername: 'PK17152' });
+    s = reducer(s, { type: 'addStaff', names: ['alice chen'], usernames: ['PK999'] });
+    expect(s.staff).toHaveLength(1);
+    expect(s.staff[0]!.jiraUsername).toBe('PK999');
+    expect(reducer(s, { type: 'addStaff', names: ['Alice Chen'], usernames: [''] })).toBe(s);
+  });
+
   it('removing staff removes their vacations and overrides (REQ-STF-005)', () => {
     let s = withStaff();
     const bob = s.staff[1]!.id;
