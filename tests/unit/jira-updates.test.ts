@@ -7,6 +7,7 @@ import { parseJiraCsv } from '../../src/parsers/jiraCsv';
 import {
   buildJiraScript,
   commentText,
+  commentedIssues,
   defaultNote,
   normalizeBaseUrl,
   planUpdates,
@@ -60,12 +61,21 @@ describe('rank moves (REQ-JIRA-004)', () => {
   it('moves only the items that left their place', () => {
     const items = moveItem(ranked(['A', 'B', 'C', 'D', 'E']), 'D', 'B');
     expect(items.map((i) => i.key)).toEqual(['A', 'D', 'B', 'C', 'E']);
-    expect(rankMoves(items)).toEqual([{ kind: 'rank', key: 'D', after: 'A' }]);
+    expect(rankMoves(items)).toEqual([{ kind: 'rank', key: 'D', after: 'A', previous: 'C' }]);
   });
 
   it('ranks a new first item before the first unmoved item', () => {
     const items = moveItem(ranked(['A', 'B', 'C']), 'C', 'A');
-    expect(rankMoves(items)).toEqual([{ kind: 'rank', key: 'C', before: 'A' }]);
+    expect(rankMoves(items)).toEqual([{ kind: 'rank', key: 'C', before: 'A', previous: 'B' }]);
+  });
+
+  it('omits the previous neighbor when the issue was already first', () => {
+    const items = [
+      item({ key: 'B', rank: '0|i0001:', fileIndex: 1 }),
+      item({ key: 'C', rank: '0|i0002:', fileIndex: 2 }),
+      item({ key: 'A', rank: '0|i0000:', fileIndex: 0 }),
+    ];
+    expect(rankMoves(items)).toEqual([{ kind: 'rank', key: 'A', after: 'C' }]);
   });
 
   it('reproduces any plan order when replayed in sequence', () => {
@@ -190,7 +200,8 @@ describe('curl script (REQ-JIRA-005 to REQ-JIRA-009, REQ-JIRA-012)', () => {
   ];
   const now = new Date('2026-10-18T12:00:00Z');
   const note = 'Based on a meeting on October 20, 2026, these fields changed:';
-  const commandLines = (text: string) => text.split('\n').filter((l) => l.startsWith('curl '));
+  const commandLines = (text: string) =>
+    text.split('\n').filter((l) => !l.startsWith('#') && l.includes('curl '));
   const script = (c = changes, s: Partial<ScriptSettings> = {}, n: string | null = note) =>
     buildJiraScript(
       planUpdates(c, { ...SETTINGS, ...s }),
@@ -231,18 +242,58 @@ describe('curl script (REQ-JIRA-005 to REQ-JIRA-009, REQ-JIRA-012)', () => {
       `curl -sS -o /dev/null -X POST 'https://jira.pncint.net/rest/api/2/issue/A-1/comment' ` +
         `-H "Authorization: Bearer $JIRA_PAT" -H 'Content-Type: application/json' ` +
         `--data '${JSON.stringify({
-          body: `${note}\n\n* Story points: 5 to 8\n* Target end: 2026-11-13 to 2026-11-16`,
+          body: `${note}\n\nStory Points: 5 to 8\nForecast End: 2026-11-13 to 2026-11-16`,
         })}' -w 'A-1 comment added -> HTTP %{http_code}\\n'`,
     );
     expect(lines[1]).toContain(`--data '{"fields":{"customfield_20001":null}}'`);
-    expect(lines[1]).toContain(String.raw`* SLA days: 2 to blank`);
-    expect(lines[2]).toContain(
-      String.raw`* Architect: Bob Martinez to Alice Chen\n* Target start: blank to 2026-11-09`,
-    );
+    expect(lines[1]).toContain(String.raw`SLA: 2 to blank`);
+    expect(lines[1]).not.toContain('* ');
+    expect(lines[2]).toContain('B_1_ok=0; curl ');
+    expect(lines[2]).toContain(' && B_1_ok=1');
+    expect(lines[2]).not.toContain('/comment');
     expect(lines[3]).toContain(`'https://jira.pncint.net/rest/agile/1.0/issue/rank'`);
     expect(lines[3]).toContain(`--data '{"issues":["U-1"],"rankBeforeIssue":"A-1"}'`);
-    expect(lines[3]).not.toContain('comment');
+    expect(lines[3]).toContain(`-w 'U-1 rank before A-1 -> HTTP %{http_code}\\n'`);
+    expect(lines[3]).toContain(String.raw`Rank: start to before A-1`);
     expect(lines[4]).toContain(`--data '{"issues":["B-1"],"rankAfterIssue":"U-1"}'`);
+    expect(lines[4]).toContain('[ "$B_1_ok" = 1 ]');
+    expect(lines[4]).toContain(
+      String.raw`Architect: Bob Martinez to Alice Chen\nForecast Start: blank to 2026-11-09\nRank: start to U-1`,
+    );
+  });
+
+  it('comments a rank-only issue and gates a combined comment on the field update', () => {
+    const rankChange = {
+      kind: 'rank' as const,
+      key: 'ABC-9',
+      after: 'ABC-2',
+      previous: 'ABC-4',
+    };
+    expect(commentedIssues(planUpdates([rankChange], SETTINGS))[0]).toEqual({
+      key: 'ABC-9',
+      changes: [rankChange],
+    });
+    const rankOnly = script([rankChange]);
+    const rankLine = commandLines(rankOnly)[0]!;
+    expect(rankLine).toContain(`--data '{"issues":["ABC-9"],"rankAfterIssue":"ABC-2"}'`);
+    expect(rankLine).toContain(' && curl ');
+    expect(rankLine).toContain(String.raw`Rank: ABC-4 to ABC-2`);
+    expect(rankLine).not.toContain('_ok');
+
+    const both = script([
+      { kind: 'storyPoints', key: 'A-1', from: 5, to: 8 },
+      { kind: 'rank', key: 'A-1', before: 'ABC-1', previous: 'ABC-4' },
+    ]);
+    expect(both).toContain('A_1_ok=0; curl ');
+    expect(both).toContain(' && A_1_ok=1');
+    expect(both).not.toContain('A-1_ok');
+    const bothRank = commandLines(both).find((l) => l.includes('/issue/rank'))!;
+    expect(bothRank.startsWith('curl ')).toBe(true);
+    expect(bothRank).toContain('[ "$A_1_ok" = 1 ] && curl ');
+    expect(bothRank).toContain(String.raw`Story Points: 5 to 8\nRank: ABC-4 to before ABC-1`);
+    const preview = commentedIssues(planUpdates(changes, SETTINGS));
+    expect(preview.map((issue) => issue.key)).toEqual(['A-1', 'A-2', 'U-1', 'B-1']);
+    expect(preview[2]!.changes).toEqual([{ kind: 'rank', key: 'U-1', before: 'A-1' }]);
   });
 
   it('leaves the comment out when there is no note', () => {
@@ -250,15 +301,43 @@ describe('curl script (REQ-JIRA-005 to REQ-JIRA-009, REQ-JIRA-012)', () => {
     expect(lines.some((l) => l.includes('/comment'))).toBe(false);
     const blank = commandLines(script(changes, {}, '  '));
     expect(blank[0]).toContain(
-      `{"body":"* Story points: 5 to 8\\n* Target end: 2026-11-13 to 2026-11-16"}`,
+      `{"body":"Story Points: 5 to 8\\nForecast End: 2026-11-13 to 2026-11-16"}`,
     );
+    expect(script(changes, {}, null)).not.toContain('_ok');
   });
 
   it('builds the comment text and default note', () => {
     const points = { kind: 'storyPoints', key: 'A-1', from: 5, to: 8 } as const;
-    expect(commentText(' Note \n', [points])).toBe('Note\n\n* Story points: 5 to 8');
-    expect(defaultNote(new Date(2026, 9, 20))).toBe(
-      'Based on a meeting on October 20, 2026, the following fields of this Jira issue changed:',
+    expect(commentText(' Note \n', [points])).toBe('Note\n\nStory Points: 5 to 8');
+    expect(
+      commentText('', [
+        { kind: 'slaDays', key: 'A-2', from: 3, to: 4 },
+        { kind: 'targetStart', key: 'A-2', from: '2026-11-09', to: '2026-11-10' },
+        { kind: 'targetEnd', key: 'A-2', from: null, to: '2026-11-16' },
+        { kind: 'architect', key: 'A-2', from: 'Bob Martinez', to: alice },
+      ]),
+    ).toBe(
+      [
+        'SLA: 3 to 4',
+        'Forecast Start: 2026-11-09 to 2026-11-10',
+        'Forecast End: blank to 2026-11-16',
+        'Architect: Bob Martinez to Alice Chen',
+      ].join('\n'),
+    );
+    expect(
+      commentText('Note', [{ kind: 'rank', key: 'X', after: 'ABC-9', previous: 'ABC-4' }]),
+    ).toBe('Note\n\nRank: ABC-4 to ABC-9');
+    expect(
+      commentText('Note', [{ kind: 'rank', key: 'X', before: 'ABC-1', previous: 'ABC-4' }]),
+    ).toBe('Note\n\nRank: ABC-4 to before ABC-1');
+    expect(commentText('Note', [{ kind: 'rank', key: 'X', after: 'ABC-2' }])).toBe(
+      'Note\n\nRank: start to ABC-2',
+    );
+    expect(defaultNote(new Date(2026, 10, 2, 12, 0))).toBe(
+      'Based on a meeting on November 2, 2026 at 12:00 PM, the following fields of this Jira issue were changed',
+    );
+    expect(defaultNote(new Date(2026, 9, 20, 9, 5))).toBe(
+      'Based on a meeting on October 20, 2026 at 9:05 AM, the following fields of this Jira issue were changed',
     );
   });
 
