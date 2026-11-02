@@ -326,7 +326,7 @@ describe('persistence and export', () => {
     await user.clear(screen.getByLabelText('Meeting notes'));
     await user.type(screen.getByLabelText('Meeting notes'), 'Based on a meeting on October 20');
     expect(screen.getByTestId('comment-preview')).toHaveTextContent(
-      'Based on a meeting on October 20 * Story points: 5 to 8 * Target end: 2026-11-30 to 2026-11-12',
+      'Based on a meeting on October 20 Story Points: 5 to 8 Forecast End: 2026-11-30 to 2026-11-12',
     );
     await user.click(screen.getByRole('button', { name: 'Download update file' }));
     expect(click).toHaveBeenCalledTimes(1);
@@ -337,7 +337,7 @@ describe('persistence and export', () => {
     expect(curls[0]).toContain(`'https://jira.pncint.net/rest/api/2/issue/A-1'`);
     expect(curls[0]).toContain(`{"fields":{"customfield_10002":8,"duedate":"2026-11-12"}}`);
     expect(curls[0]).toContain(
-      `{"body":"Based on a meeting on October 20\\n\\n* Story points: 5 to 8\\n* Target end: 2026-11-30 to 2026-11-12"}`,
+      `{"body":"Based on a meeting on October 20\\n\\nStory Points: 5 to 8\\nForecast End: 2026-11-30 to 2026-11-12"}`,
     );
     expect(curls[0]).toContain('Bearer $JIRA_PAT');
     expect(text).toContain('#   B-1 SLA days: 5 to 7 (no field id for SLA days in Settings)');

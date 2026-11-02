@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { commentText, type UpdatePlan } from '../state/jiraScript';
+import { commentText, commentedIssues, type UpdatePlan } from '../state/jiraScript';
 
 interface Props {
   plan: UpdatePlan;
@@ -15,7 +15,7 @@ export function JiraUpdateDialog({ plan, defaultNote, onCancel, onConfirm }: Pro
   const [addComment, setAddComment] = useState(true);
   const area = useRef<HTMLTextAreaElement>(null);
   const titleId = useId();
-  const example = plan.issues[0];
+  const example = commentedIssues(plan)[0];
 
   useEffect(() => {
     area.current?.focus();

@@ -25,7 +25,8 @@ will start and finish.
   export (CSV).
 - **Write changes back to Jira.** Create a Jira update file: a curl script that uses your
   Jira personal access token to update story points, SLA, architect, target start and end,
-  and plan order, and comments on each issue with your meeting notes and every change.
+  and plan order, and comments on each changed issue with your meeting note and only
+  the fields and rank move that changed.
 
 ## Using the app
 
@@ -76,8 +77,8 @@ are in [docs/requirements/08-scheduling-forecast.md](docs/requirements/08-schedu
    `curl -sS -H "Authorization: Bearer $JIRA_PAT" https://jira.pncint.net/rest/api/2/field`.
    For a user picker architect field, enter each architect's Jira username.
 2. Click **Jira update file**. Edit the meeting notes (they start as "Based on a meeting
-   on <today>, the following fields of this Jira issue changed:") and click **Download
-   update file** to save `jira-updates-YYYY-MM-DD.sh`.
+   on <today> at <time>, the following fields of this Jira issue were changed") and click
+   **Download update file** to save `jira-updates-YYYY-MM-DD.sh`.
 3. In a macOS Terminal:
 
    ```bash
@@ -85,9 +86,10 @@ are in [docs/requirements/08-scheduling-forecast.md](docs/requirements/08-schedu
    bash ~/Downloads/jira-updates-YYYY-MM-DD.sh
    ```
 
-   Or paste the `curl` lines one at a time, in order. Each issue's line updates its
-   fields and then adds a comment with your notes and each field's from and to values.
-   Lines print the change and HTTP status (`204` updated, `201` comment added). Details in
+   Or paste the `curl` lines one at a time, in order. Each changed issue gets a separate
+   comment with your note and one plain line per field or rank move that is sent. The
+   comment is posted only after that issue's updates succeed. Lines print the change and
+   HTTP status (`204` updated, `201` comment added). Details in
    [docs/requirements/15-jira-update-script.md](docs/requirements/15-jira-update-script.md).
 
 ## Development

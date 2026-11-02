@@ -9,7 +9,14 @@ import {
   type StaffMember,
 } from './types';
 
-export type RankChange = { kind: 'rank'; key: string; after?: string; before?: string };
+export type RankChange = {
+  kind: 'rank';
+  key: string;
+  after?: string;
+  before?: string;
+  /** Predecessor in the imported rank order. Omitted when the issue was already first. */
+  previous?: string;
+};
 
 export type FieldChange =
   | { kind: 'storyPoints' | 'slaDays'; key: string; from: number | null; to: number | null }
@@ -67,17 +74,23 @@ function longestIncreasing(seq: number[]): Set<number> {
  * unmoved item when it is now first), so the moves must run in sequence.
  */
 export function rankMoves(items: JiraItem[]): RankChange[] {
-  const original = new Map(sortByRank(items).map((item, idx) => [item.key, idx]));
+  const byRank = sortByRank(items);
+  const original = new Map(byRank.map((item, idx) => [item.key, idx]));
+  const predecessor = new Map(
+    byRank.map((item, idx) => [item.key, idx === 0 ? undefined : byRank[idx - 1]!.key]),
+  );
   const stable = longestIncreasing(items.map((i) => original.get(i.key)!));
   const firstStable = items.find((_, idx) => stable.has(idx))?.key;
   const moves: RankChange[] = [];
   items.forEach((item, idx) => {
     if (stable.has(idx)) return;
-    moves.push(
-      idx === 0
-        ? { kind: 'rank', key: item.key, before: firstStable }
-        : { kind: 'rank', key: item.key, after: items[idx - 1]!.key },
-    );
+    const previous = predecessor.get(item.key);
+    moves.push({
+      kind: 'rank',
+      key: item.key,
+      ...(idx === 0 ? { before: firstStable } : { after: items[idx - 1]!.key }),
+      ...(previous ? { previous } : {}),
+    });
   });
   return moves;
 }

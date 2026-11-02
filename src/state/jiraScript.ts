@@ -77,9 +77,32 @@ function curl(method: string, url: string, body: unknown, label: string, extra =
 
 const show = (v: string | number | null) => (v === null || v === '' ? 'blank' : String(v));
 
-/** `Story points: 5 to 8` */
+const COMMENT_LABELS: Record<FieldChange['kind'], string> = {
+  storyPoints: 'Story Points',
+  slaDays: 'SLA',
+  architect: 'Architect',
+  targetStart: 'Forecast Start',
+  targetEnd: 'Forecast End',
+};
+
+/** `Story points: 5 to 8` — the terminal status line, not the Jira comment. */
 export function describeField(change: FieldChange): string {
   const label = FIELD_LABELS[change.kind];
+  if (change.kind === 'architect') {
+    return `${label}: ${change.from || 'unassigned'} to ${change.to.name}`;
+  }
+  return `${label}: ${show(change.from)} to ${show(change.to)}`;
+}
+
+/** One plain comment line, such as `Story Points: 5 to 8` or `Rank: ABC-4 to ABC-9`. */
+export function describeComment(change: FieldChange | RankChange): string {
+  if (change.kind === 'rank') {
+    const from = change.previous ?? 'start';
+    return change.before
+      ? `Rank: ${from} to before ${change.before}`
+      : `Rank: ${from} to ${change.after}`;
+  }
+  const label = COMMENT_LABELS[change.kind];
   if (change.kind === 'architect') {
     return `${label}: ${change.from || 'unassigned'} to ${change.to.name}`;
   }
@@ -94,18 +117,47 @@ function describe(change: JiraChange): string {
 }
 
 export function defaultNote(date: Date = new Date()): string {
-  const when = date.toLocaleDateString('en-US', {
+  const day = date.toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
   });
-  return `Based on a meeting on ${when}, the following fields of this Jira issue changed:`;
+  const time = date
+    .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    .replace(/[\u202f\u00a0]/g, ' ');
+  return `Based on a meeting on ${day} at ${time}, the following fields of this Jira issue were changed`;
 }
 
-/** The note followed by one bullet per changed field, in Jira wiki markup. */
-export function commentText(note: string, changes: FieldChange[]): string {
-  const bullets = changes.map((c) => `* ${describeField(c)}`);
-  return note.trim() ? [note.trim(), '', ...bullets].join('\n') : bullets.join('\n');
+/** The note followed by one plain line per change that is actually sent. */
+export function commentText(note: string, changes: Array<FieldChange | RankChange>): string {
+  const lines = changes.map(describeComment);
+  return note.trim() ? [note.trim(), '', ...lines].join('\n') : lines.join('\n');
+}
+
+/**
+ * Issues in the order their comment is posted. Field-only comments run with the
+ * field update; rank-only and combined comments run with the rank move.
+ */
+export function commentedIssues(
+  plan: UpdatePlan,
+): { key: string; changes: Array<FieldChange | RankChange> }[] {
+  const fieldsByKey = new Map(plan.issues.map((issue) => [issue.key, issue.changes]));
+  const ranked = new Set(plan.ranks.map((rank) => rank.key));
+  const fieldOnly = plan.issues
+    .filter((issue) => !ranked.has(issue.key))
+    .map((issue) => ({ key: issue.key, changes: [...issue.changes] }));
+  const withRank = plan.ranks.map((rank) => ({
+    key: rank.key,
+    changes: [...(fieldsByKey.get(rank.key) ?? []), rank],
+  }));
+  return [...fieldOnly, ...withRank];
+}
+
+/** Bash 3.2 names are `[A-Za-z_][A-Za-z0-9_]*`. `A-1` becomes `A_1_ok`. */
+function bashOkVar(key: string): string {
+  const safe = key.replace(/[^A-Za-z0-9_]/g, '_');
+  const named = /^[A-Za-z_]/.test(safe) ? safe : `_${safe}`;
+  return `${named}_ok`;
 }
 
 function fieldValue(
@@ -150,8 +202,9 @@ export function planUpdates(changes: JiraChange[], settings: ScriptSettings): Up
 }
 
 /**
- * One line per issue: update its fields and, only when that succeeds, add the
- * comment. Rank moves follow, one line each, and must run in order.
+ * Field updates, then rank moves in order. Each changed issue gets a comment
+ * after the updates that apply to it succeed: on the field line when there is
+ * no rank move, and on the rank line when there is one.
  */
 export function buildJiraScript(
   plan: UpdatePlan,
@@ -160,6 +213,16 @@ export function buildJiraScript(
 ): string {
   const base = normalizeBaseUrl(settings.jiraBaseUrl);
   const withComment = opts.note !== null && opts.note !== undefined;
+  const rankedKeys = new Set(plan.ranks.map((rank) => rank.key));
+  const commentByKey = new Map(commentedIssues(plan).map((issue) => [issue.key, issue.changes]));
+  const commentFor = (key: string) =>
+    curl(
+      'POST',
+      `${base}/rest/api/2/issue/${encodeURIComponent(key)}/comment`,
+      { body: commentText(opts.note!, commentByKey.get(key) ?? []) },
+      `${key} comment added`,
+      ' -o /dev/null',
+    );
 
   const issueLines = plan.issues.map((issue) => {
     const update = curl(
@@ -170,25 +233,28 @@ export function buildJiraScript(
       ' --fail-with-body',
     );
     if (!withComment) return update;
-    const comment = curl(
-      'POST',
-      `${base}/rest/api/2/issue/${encodeURIComponent(issue.key)}/comment`,
-      { body: commentText(opts.note!, issue.changes) },
-      `${issue.key} comment added`,
-      ' -o /dev/null',
-    );
-    return `${update} && ${comment}`;
+    if (rankedKeys.has(issue.key)) {
+      const flag = bashOkVar(issue.key);
+      return `${flag}=0; ${update} && ${flag}=1`;
+    }
+    return `${update} && ${commentFor(issue.key)}`;
   });
-  const rankLines = plan.ranks.map((r) =>
-    curl(
+  const rankLines = plan.ranks.map((r) => {
+    const rank = curl(
       'PUT',
       `${base}/rest/agile/1.0/issue/rank`,
       r.after
         ? { issues: [r.key], rankAfterIssue: r.after }
         : { issues: [r.key], rankBeforeIssue: r.before },
       describe(r),
-    ),
-  );
+      withComment ? ' --fail-with-body' : '',
+    );
+    if (!withComment) return rank;
+    const comment = commentFor(r.key);
+    if (!plan.issues.some((issue) => issue.key === r.key)) return `${rank} && ${comment}`;
+    const flag = bashOkVar(r.key);
+    return `${rank} && [ "$${flag}" = 1 ] && ${comment}`;
+  });
 
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const noteLines = withComment && opts.note!.trim() ? opts.note!.trim().split('\n') : [];
@@ -200,7 +266,15 @@ export function buildJiraScript(
     `# ${plural(plan.issues.length, 'issue')} to update and ${plural(plan.ranks.length, 'rank move')}, one curl line each.`,
     ...(withComment
       ? [
-          '# Each issue update is followed by a comment listing its changed fields (from and to).',
+          '# Each changed issue gets a comment: the meeting note, then one plain line per change sent.',
+          "# The comment is posted only after that issue's field update and rank move, if any, succeed.",
+          ...(plan.issues.some((issue) => rankedKeys.has(issue.key))
+            ? [
+                '# When an issue changes fields and rank, the field line sets KEY_ok (A-1 becomes A_1_ok).',
+                '# The rank line then comments only if that flag is 1. A failed field update still lets',
+                '# later rank moves run, and skips the comment.',
+              ]
+            : []),
           ...(noteLines.length ? ['# Comment note:', ...noteLines.map((l) => `#   ${l}`)] : []),
         ]
       : []),

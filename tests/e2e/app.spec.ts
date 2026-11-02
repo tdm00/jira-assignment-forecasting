@@ -158,7 +158,7 @@ test.describe('forecasting workflow', () => {
     );
     expect(text).toContain(`{"fields":{"customfield_10002":13}}`);
     expect(text).toContain(
-      `{"body":"Based on a meeting on October 20\\n\\n* Story points: 5 to 13"}`,
+      `{"body":"Based on a meeting on October 20\\n\\nStory Points: 5 to 13"}`,
     );
   });
 
