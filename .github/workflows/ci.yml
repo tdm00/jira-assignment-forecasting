@@ -77,20 +77,60 @@ jobs:
           if-no-files-found: ignore
 
   release:
-    name: Attach file to release
-    if: startsWith(github.ref, 'refs/tags/v')
+    name: Publish next release
     needs: test-and-build
+    # v* tags still start CI. Publish only after a successful push to main so
+    # creating vN does not create another tag or release.
+    if: needs.test-and-build.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write
     steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-tags: true
+
       - uses: actions/download-artifact@v8
         with:
           name: jira-gantt-forecaster
-      - name: Create GitHub release
+          path: release-asset
+
+      - name: Tag and publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mv index.html jira-gantt-forecaster.html
-          gh release create "${{ github.ref_name }}" jira-gantt-forecaster.html \
-            --repo "${{ github.repository }}" --title "${{ github.ref_name }}" --generate-notes
+          set -euo pipefail
+
+          git fetch origin --tags --force
+
+          # Highest tag that is v plus digits only (v1, v2, not v1.2.3). None yet -> v1.
+          highest=0
+          while IFS= read -r tag; do
+            if [[ "${tag}" =~ ^v([0-9]+)$ ]]; then
+              value=$((10#${BASH_REMATCH[1]}))
+              if (( value > highest )); then
+                highest=${value}
+              fi
+            fi
+          done < <(git tag --list 'v*')
+
+          release_tag="v$((highest + 1))"
+          git tag "${release_tag}" "${{ github.sha }}"
+          git push origin "${release_tag}"
+
+          if [[ -f release-asset/index.html ]]; then
+            mv release-asset/index.html jira-gantt-forecaster.html
+          elif [[ -f release-asset/dist/index.html ]]; then
+            mv release-asset/dist/index.html jira-gantt-forecaster.html
+          else
+            echo "jira-gantt-forecaster artifact did not contain index.html" >&2
+            find release-asset -type f -print >&2
+            exit 1
+          fi
+
+          gh release create "${release_tag}" jira-gantt-forecaster.html \
+            --repo "${{ github.repository }}" \
+            --title "${release_tag}" \
+            --generate-notes
