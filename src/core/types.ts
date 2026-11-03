@@ -61,17 +61,28 @@ export interface Settings {
   backupThresholdDays: number;
   /** Jira server that the update script targets, for example `https://jira.example.com`. */
   jiraBaseUrl: string;
-  /** Jira field ids (for example `customfield_10002`); blank skips that kind of change. */
+  /**
+   * Jira field ids (for example `customfield_10002`). A filled-in id is sent as-is.
+   * When the id is blank, the script looks the id up by the matching field name.
+   */
   storyPointsField: string;
+  storyPointsFieldName: string;
   slaDaysField: string;
+  slaDaysFieldName: string;
   architectField: string;
+  architectFieldName: string;
   architectFieldType: ArchitectFieldType;
   targetStartField: string;
+  targetStartFieldName: string;
   targetEndField: string;
+  targetEndFieldName: string;
   /** Write forecast start and end to the target start and end fields. */
   exportForecastDates: boolean;
   exportRankChanges: boolean;
-  /** Also write architects picked by crew pools or auto-assign, not only grid overrides. */
+  /**
+   * Kept so projects saved before the architect on the row was always exported still load.
+   * Detection no longer reads this switch.
+   */
   exportForecastArchitects: boolean;
 }
 

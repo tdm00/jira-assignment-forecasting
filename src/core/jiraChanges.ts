@@ -29,22 +29,19 @@ export interface ChangeInput {
   items: JiraItem[];
   staff: StaffMember[];
   scheduled: Map<string, ScheduledItem>;
-  settings: Pick<Settings, 'exportForecastArchitects' | 'exportForecastDates'>;
+  settings: Pick<Settings, 'exportForecastDates'>;
 }
 
-function targetArchitect(
+/** The architect shown on the row: a grid pick, or the forecast (including auto-assign and crew pools). */
+function shownArchitect(
   item: JiraItem,
   s: ScheduledItem | undefined,
   staff: StaffMember[],
-  forecast: boolean,
 ): StaffMember | undefined {
   const override = item.architectOverride;
   if (override && override !== AUTO_ASSIGN) return staff.find((m) => m.id === override);
-  if (override === AUTO_ASSIGN || forecast) {
-    if (!s?.staffId || s.state === 'done') return undefined;
-    return staff.find((m) => m.id === s.staffId);
-  }
-  return undefined;
+  if (!s?.staffId || s.state === 'done') return undefined;
+  return staff.find((m) => m.id === s.staffId);
 }
 
 /** Indexes (into `seq`) of one longest strictly increasing subsequence. */
@@ -96,8 +93,9 @@ export function rankMoves(items: JiraItem[]): RankChange[] {
 }
 
 /**
- * Edits made in the app that differ from the imported Jira data, plus forecast
- * dates that differ from Jira's start and end. Field changes come first in plan order.
+ * Edits visible on the row that differ from the imported Jira data: story points,
+ * SLA, the architect now shown (manual or forecast), and forecast dates. Field
+ * changes come first in plan order.
  */
 export function jiraChanges({ items, staff, scheduled, settings }: ChangeInput): JiraChange[] {
   const changes: JiraChange[] = [];
@@ -116,7 +114,7 @@ export function jiraChanges({ items, staff, scheduled, settings }: ChangeInput):
       }
     }
     const s = scheduled.get(item.key);
-    const to = targetArchitect(item, s, staff, settings.exportForecastArchitects);
+    const to = shownArchitect(item, s, staff);
     if (to && normalizeName(to.name) !== normalizeName(item.architect)) {
       changes.push({ kind: 'architect', key: item.key, from: item.architect.trim(), to });
     }

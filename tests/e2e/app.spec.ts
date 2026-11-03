@@ -156,10 +156,9 @@ test.describe('forecasting workflow', () => {
     expect(text).toContain(
       `curl -sS --fail-with-body -X PUT 'https://jira.pncint.net/rest/api/2/issue/A-1' -H "Authorization: Bearer $JIRA_PAT"`,
     );
-    expect(text).toContain(`{"fields":{"customfield_10002":13}}`);
-    expect(text).toContain(
-      `{"body":"Based on a meeting on October 20\\n\\nStory Points: 5 to 13"}`,
-    );
+    expect(text).toContain('field_json=$(curl ');
+    expect(text).toContain('customfield_10002');
+    expect(text).toContain('Story Points: 5 to 13');
   });
 
   test('restores the session after reload (REQ-PER-002)', async ({ page }) => {

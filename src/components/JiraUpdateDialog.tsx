@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { commentText, commentedIssues, type UpdatePlan } from '../state/jiraScript';
+import { commentText, commentedIssues, updateSummary, type UpdatePlan } from '../state/jiraScript';
 
 interface Props {
   plan: UpdatePlan;
@@ -7,8 +7,6 @@ interface Props {
   onCancel: () => void;
   onConfirm: (note: string | null) => void;
 }
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 export function JiraUpdateDialog({ plan, defaultNote, onCancel, onConfirm }: Props) {
   const [note, setNote] = useState(defaultNote);
@@ -37,11 +35,7 @@ export function JiraUpdateDialog({ plan, defaultNote, onCancel, onConfirm }: Pro
           Create Jira update file
         </h2>
         <p className="hint" data-testid="update-summary">
-          {plural(plan.issues.length, 'issue')} will be updated
-          {plan.ranks.length ? ` and ${plural(plan.ranks.length, 'rank move')} made` : ''}.
-          {plan.skipped.length
-            ? ` ${plural(plan.skipped.length, 'change')} cannot be sent yet (see Settings > Jira update file).`
-            : ''}
+          {updateSummary(plan)}
         </p>
         <label className="check">
           <input
