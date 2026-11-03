@@ -7,11 +7,16 @@ export type ScriptSettings = Pick<
   Settings,
   | 'jiraBaseUrl'
   | 'storyPointsField'
+  | 'storyPointsFieldName'
   | 'slaDaysField'
+  | 'slaDaysFieldName'
   | 'architectField'
+  | 'architectFieldName'
   | 'architectFieldType'
   | 'targetStartField'
+  | 'targetStartFieldName'
   | 'targetEndField'
+  | 'targetEndFieldName'
   | 'exportRankChanges'
 >;
 
@@ -20,11 +25,21 @@ export interface SkippedChange {
   reason: string;
 }
 
+/** One field on an issue. `id` is sent as-is; a blank id is resolved from `name` when the script runs. */
+export interface ResolvedField {
+  id: string;
+  name: string;
+  value: unknown;
+  change: FieldChange;
+}
+
 /** All field changes for one issue, sent as a single update. */
 export interface IssueUpdate {
   key: string;
+  /** Fields whose Settings id is filled in. An id wins over the name. */
   fields: Record<string, unknown>;
   changes: FieldChange[];
+  resolved: ResolvedField[];
 }
 
 export interface UpdatePlan {
@@ -49,6 +64,27 @@ const FIELD_SETTINGS = {
   targetEnd: 'targetEndField',
 } as const satisfies Record<FieldChange['kind'], keyof ScriptSettings>;
 
+const FIELD_NAMES = {
+  storyPoints: 'storyPointsFieldName',
+  slaDays: 'slaDaysFieldName',
+  architect: 'architectFieldName',
+  targetStart: 'targetStartFieldName',
+  targetEnd: 'targetEndFieldName',
+} as const satisfies Record<FieldChange['kind'], keyof ScriptSettings>;
+
+/** Bash variables set from one GET /rest/api/2/field lookup. */
+const ID_VARS: Record<FieldChange['kind'], string> = {
+  storyPoints: 'story_points_id',
+  slaDays: 'sla_days_id',
+  architect: 'architect_id',
+  targetStart: 'target_start_id',
+  targetEnd: 'target_end_id',
+};
+
+/** Reads a Jira field list on stdin and prints the id whose name is $JIRA_FIELD_NAME. */
+const FIELD_LOOKUP_PERL =
+  'my $want = $ENV{JIRA_FIELD_NAME} // ""; utf8::decode($want); my $raw = do { local $/; <STDIN> }; my $data = eval { JSON::PP->new->utf8->decode($raw) }; exit 0 unless ref($data) eq "ARRAY"; for my $field (@$data) { next unless ref($field) eq "HASH"; my $name = $field->{name}; next unless defined $name && $name eq $want; my $id = $field->{id}; if (defined $id && $id =~ /^[A-Za-z0-9_]+$/) { print $id; } exit 0; }';
+
 export function normalizeBaseUrl(raw: string): string {
   const url = raw.trim().replace(/\/+$/, '');
   if (!url) return '';
@@ -65,12 +101,19 @@ function writeOutText(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/%/g, '%%');
 }
 
-function curl(method: string, url: string, body: unknown, label: string, extra = ''): string {
+function curl(
+  method: string,
+  url: string,
+  body: unknown,
+  label: string,
+  extra = '',
+  dataExpr?: string,
+): string {
   return [
     `curl -sS${extra} -X ${method} ${shellQuote(url)}`,
     `-H "Authorization: Bearer $${PAT_VARIABLE}"`,
     `-H 'Content-Type: application/json'`,
-    `--data ${shellQuote(JSON.stringify(body))}`,
+    `--data ${dataExpr ?? shellQuote(JSON.stringify(body))}`,
     `-w ${shellQuote(`${writeOutText(label)} -> HTTP %{http_code}\\n`)}`,
   ].join(' ');
 }
@@ -183,9 +226,13 @@ export function planUpdates(changes: JiraChange[], settings: ScriptSettings): Up
       else skipped.push({ change, reason: 'rank changes are turned off in Settings' });
       continue;
     }
-    const field = settings[FIELD_SETTINGS[change.kind]].trim();
-    if (!field) {
-      skipped.push({ change, reason: `no field id for ${FIELD_LABELS[change.kind]} in Settings` });
+    const id = settings[FIELD_SETTINGS[change.kind]].trim();
+    const name = settings[FIELD_NAMES[change.kind]].trim();
+    if (!id && !name) {
+      skipped.push({
+        change,
+        reason: `no field id or name for ${FIELD_LABELS[change.kind]} in Settings`,
+      });
       continue;
     }
     const value = fieldValue(change, settings);
@@ -193,12 +240,107 @@ export function planUpdates(changes: JiraChange[], settings: ScriptSettings): Up
       skipped.push({ change, reason: value.reason });
       continue;
     }
-    const issue = byKey.get(change.key) ?? { key: change.key, fields: {}, changes: [] };
-    issue.fields[field] = value.value;
+    const issue = byKey.get(change.key) ?? {
+      key: change.key,
+      fields: {},
+      changes: [],
+      resolved: [],
+    };
+    if (id) issue.fields[id] = value.value;
+    issue.resolved.push({ id, name, value: value.value, change });
     issue.changes.push(change);
     byKey.set(change.key, issue);
   }
   return { issues: [...byKey.values()], ranks, skipped };
+}
+
+function needsLookup(issue: IssueUpdate): boolean {
+  return issue.resolved.some((field) => !field.id);
+}
+
+/** Appends one `"id":value` fragment. A variable id is omitted when the lookup missed. */
+function appendResolved(field: ResolvedField): string {
+  if (field.id) {
+    const fragment = `${JSON.stringify(field.id)}:${JSON.stringify(field.value)}`;
+    return `fields="$fields\${sep}"${shellQuote(fragment)}; sep=","`;
+  }
+  const variable = ID_VARS[field.change.kind];
+  const json = shellQuote(JSON.stringify(field.value));
+  return `[ -n "$${variable}" ] && { fields="$fields\${sep}\\"$${variable}\\":"${json}; sep=","; }`;
+}
+
+/** Bash expression that expands to the PUT body after any name lookup. */
+const LOOKUP_DATA = '"{\\"fields\\":$fields}"';
+
+function fieldUpdate(issue: IssueUpdate, base: string): string {
+  const label = `${issue.key} ${issue.changes.map(describeField).join('; ')}`;
+  const url = `${base}/rest/api/2/issue/${encodeURIComponent(issue.key)}`;
+  if (!needsLookup(issue)) {
+    return curl('PUT', url, { fields: issue.fields }, label, ' --fail-with-body');
+  }
+  const setup = `fields="{"; sep=""; ${issue.resolved.map(appendResolved).join('; ')}; fields="$fields}"`;
+  const update = curl('PUT', url, null, label, ' --fail-with-body', LOOKUP_DATA);
+  return `${setup}; [ "$fields" != "{}" ] && ${update}`;
+}
+
+/** One GET, then one variable per field whose id was left blank. */
+function lookupLines(plan: UpdatePlan, base: string): string[] {
+  const names = new Map<FieldChange['kind'], string>();
+  for (const issue of plan.issues) {
+    for (const field of issue.resolved) {
+      if (!field.id && field.name) names.set(field.change.kind, field.name);
+    }
+  }
+  if (names.size === 0) return [];
+  const lines = [
+    '# Field ids left blank in Settings are looked up once by name (perl, included on macOS).',
+    '# An id that is set is used as-is.',
+    `field_json=$(curl -sS --fail-with-body -H "Authorization: Bearer $${PAT_VARIABLE}" ${shellQuote(`${base}/rest/api/2/field`)}) || field_json=''`,
+    'resolve_field() {',
+    `  JIRA_FIELD_NAME=$1 perl -MJSON::PP -0777 -e '${FIELD_LOOKUP_PERL}'`,
+    '}',
+  ];
+  for (const [kind, name] of names) {
+    const variable = ID_VARS[kind];
+    const message = `No Jira field named '${name}'; skipping ${FIELD_LABELS[kind]}.`;
+    lines.push(
+      `${variable}=$(printf '%s' "$field_json" | resolve_field ${shellQuote(name)})`,
+      `[ -n "$${variable}" ] || printf '%s\\n' ${shellQuote(message)}`,
+    );
+  }
+  return lines;
+}
+
+const SUMMARY_BITS: { kinds: FieldChange['kind'][]; one: string; many: string }[] = [
+  { kinds: ['storyPoints'], one: 'story point', many: 'story points' },
+  { kinds: ['slaDays'], one: 'SLA', many: 'SLAs' },
+  { kinds: ['targetStart', 'targetEnd'], one: 'date', many: 'dates' },
+  { kinds: ['architect'], one: 'architect', many: 'architects' },
+];
+
+function joinList(bits: string[]): string {
+  if (bits.length <= 1) return bits[0] ?? '';
+  if (bits.length === 2) return `${bits[0]} and ${bits[1]}`;
+  return `${bits.slice(0, -1).join(', ')}, and ${bits[bits.length - 1]}`;
+}
+
+/** Dialog line: issue count, then story points, SLA, dates, and architect, then rank moves. */
+export function updateSummary(plan: UpdatePlan): string {
+  const counts = new Map<FieldChange['kind'], number>();
+  for (const issue of plan.issues) {
+    for (const change of issue.changes) counts.set(change.kind, (counts.get(change.kind) ?? 0) + 1);
+  }
+  const bits = SUMMARY_BITS.flatMap(({ kinds, one, many }) => {
+    const n = kinds.reduce((sum, kind) => sum + (counts.get(kind) ?? 0), 0);
+    return n ? [`${n} ${n === 1 ? one : many}`] : [];
+  });
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const detail = bits.length ? ` (${joinList(bits)})` : '';
+  const ranks = plan.ranks.length ? ` and ${plural(plan.ranks.length, 'rank move')} made` : '';
+  const skipped = plan.skipped.length
+    ? ` ${plural(plan.skipped.length, 'change')} cannot be sent yet (see Settings > Jira update file).`
+    : '';
+  return `${plural(plan.issues.length, 'issue')} will be updated${detail}${ranks}.${skipped}`;
 }
 
 /**
@@ -225,13 +367,7 @@ export function buildJiraScript(
     );
 
   const issueLines = plan.issues.map((issue) => {
-    const update = curl(
-      'PUT',
-      `${base}/rest/api/2/issue/${encodeURIComponent(issue.key)}`,
-      { fields: issue.fields },
-      `${issue.key} ${issue.changes.map(describeField).join('; ')}`,
-      ' --fail-with-body',
-    );
+    const update = fieldUpdate(issue, base);
     if (!withComment) return update;
     if (rankedKeys.has(issue.key)) {
       const flag = bashOkVar(issue.key);
@@ -299,5 +435,5 @@ export function buildJiraScript(
     `: "\${${PAT_VARIABLE}:?Set ${PAT_VARIABLE} to your Jira personal access token first}"`,
   ];
 
-  return [...header, ...issueLines, ...rankLines, ''].join('\n');
+  return [...header, ...lookupLines(plan, base), ...issueLines, ...rankLines, ''].join('\n');
 }

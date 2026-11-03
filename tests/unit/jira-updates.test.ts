@@ -1,3 +1,7 @@
+import { spawnSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { jiraChanges, rankMoves, type JiraChange } from '../../src/core/jiraChanges';
 import { moveItem } from '../../src/core/rank';
@@ -12,6 +16,7 @@ import {
   normalizeBaseUrl,
   planUpdates,
   shellQuote,
+  updateSummary,
   type ScriptSettings,
 } from '../../src/state/jiraScript';
 import { coerceState } from '../../src/state/persistence';
@@ -21,11 +26,16 @@ import { fixture, item, testSettings, testState } from '../helpers';
 const SETTINGS: ScriptSettings = {
   jiraBaseUrl: 'https://jira.pncint.net',
   storyPointsField: 'customfield_10002',
+  storyPointsFieldName: 'Story Points',
   slaDaysField: 'customfield_20001',
+  slaDaysFieldName: 'SLA',
   architectField: 'customfield_20002',
+  architectFieldName: 'Architect',
   architectFieldType: 'user',
   targetStartField: 'customfield_20003',
+  targetStartFieldName: 'Target start',
   targetEndField: 'customfield_20004',
+  targetEndFieldName: 'Target end',
   exportRankChanges: true,
 };
 
@@ -139,13 +149,30 @@ describe('detecting changes (REQ-JIRA-001, REQ-JIRA-002, REQ-JIRA-003)', () => {
     ]);
   });
 
-  it('only writes forecast suggestions when asked to', () => {
-    let state = testState({ items: [item({ key: 'S-1', architect: '' })] });
+  it('writes the architect shown on the row, including forecast and auto-assign', () => {
+    let state = testState({
+      items: [
+        item({ key: 'S-1', architect: '' }),
+        item({ key: 'S-2', architect: 'Alice Chen' }),
+        item({ key: 'S-3', architect: '', status: 'Done' }),
+      ],
+    });
     state = reducer(state, { type: 'addStaff', names: ['Alice Chen'] });
-    expect(changesFor(state)).toEqual([]);
-    state = { ...state, settings: testSettings({ exportForecastArchitects: true }) };
     expect(changesFor(state)).toEqual([
       { kind: 'architect', key: 'S-1', from: '', to: state.staff[0] },
+    ]);
+  });
+
+  it('writes a crew-pool architect when the name differs from Jira', () => {
+    let state = testState({
+      items: [item({ key: 'S-1', architect: 'Alice Chen', crew: 'Phoenix' })],
+    });
+    state = reducer(state, { type: 'addStaff', names: ['Alice Chen', 'Bob Martinez'] });
+    const bob = state.staff[1]!;
+    state = reducer(state, { type: 'setCrewSlot', crew: 'Phoenix', role: 1, staffId: bob.id });
+    state = reducer(state, { type: 'updateSettings', patch: { assignmentMode: 'crew-pool' } });
+    expect(changesFor(state)).toEqual([
+      { kind: 'architect', key: 'S-1', from: 'Alice Chen', to: bob },
     ]);
   });
 
@@ -159,10 +186,22 @@ describe('detecting changes (REQ-JIRA-001, REQ-JIRA-002, REQ-JIRA-003)', () => {
   it('sets target start and end to the forecast where they differ (REQ-JIRA-011)', () => {
     let state = testState({
       items: [
-        item({ key: 'D-1', slaDays: 3, startDate: '2026-11-09', endDate: '2026-11-20' }),
-        item({ key: 'D-2', slaDays: 2 }),
-        item({ key: 'D-3', status: 'Done', startDate: '2026-10-01', endDate: '2026-10-02' }),
-        item({ key: 'D-4', slaDays: null, storyPoints: null }),
+        item({
+          key: 'D-1',
+          architect: 'Alice Chen',
+          slaDays: 3,
+          startDate: '2026-11-09',
+          endDate: '2026-11-20',
+        }),
+        item({ key: 'D-2', architect: 'Alice Chen', slaDays: 2 }),
+        item({
+          key: 'D-3',
+          architect: 'Alice Chen',
+          status: 'Done',
+          startDate: '2026-10-01',
+          endDate: '2026-10-02',
+        }),
+        item({ key: 'D-4', architect: 'Alice Chen', slaDays: null, storyPoints: null }),
       ],
     });
     state = reducer(state, { type: 'addStaff', names: ['Alice Chen'] });
@@ -372,22 +411,29 @@ describe('curl script (REQ-JIRA-005 to REQ-JIRA-009, REQ-JIRA-012)', () => {
     const settings = {
       ...SETTINGS,
       slaDaysField: ' ',
+      slaDaysFieldName: ' ',
       targetStartField: '',
+      targetStartFieldName: '',
       exportRankChanges: false,
     };
     const plan = planUpdates(all, settings);
     expect(plan.issues.map((i) => i.key)).toEqual(['A-1', 'B-1']);
     expect(plan.issues[1]!.changes.map((c) => c.kind)).toEqual(['architect']);
     expect(plan.skipped.map((s) => s.reason)).toEqual([
-      'no field id for SLA days in Settings',
-      'no field id for Target start in Settings',
+      'no field id or name for SLA days in Settings',
+      'no field id or name for Target start in Settings',
       'rank changes are turned off in Settings',
       'rank changes are turned off in Settings',
       'no Jira username for Bo in Settings',
     ]);
     const text = buildJiraScript(plan, settings, { note });
-    expect(text).toContain('#   A-2 SLA days: 2 to blank (no field id for SLA days in Settings)');
+    expect(text).toContain(
+      '#   A-2 SLA days: 2 to blank (no field id or name for SLA days in Settings)',
+    );
+    expect(text).not.toContain('field_json=');
     expect(commandLines(text)[1]).not.toContain('Target start');
+    expect(commentText(note, plan.issues[0]!.changes)).not.toContain('SLA');
+    expect(commentText(note, plan.issues[0]!.changes)).toContain('Story Points: 5 to 8');
   });
 
   it('quotes values safely for the shell and curl', () => {
@@ -409,6 +455,124 @@ describe('curl script (REQ-JIRA-005 to REQ-JIRA-009, REQ-JIRA-012)', () => {
   it('targets jira.pncint.net by default', () => {
     expect(testSettings().jiraBaseUrl).toBe('https://jira.pncint.net');
   });
+
+  it('keeps a blank id when a name is set and looks that name up once', () => {
+    const settings: ScriptSettings = {
+      ...SETTINGS,
+      storyPointsField: '',
+      storyPointsFieldName: 'Story Points',
+      targetEndField: ' ',
+      targetEndFieldName: 'Target end',
+    };
+    const plan = planUpdates(changes, settings);
+    expect(plan.skipped).toEqual([]);
+    expect(plan.issues[0]!.fields).toEqual({});
+    expect(plan.issues[0]!.changes.map((c) => c.kind)).toEqual(['storyPoints', 'targetEnd']);
+    const text = buildJiraScript(plan, settings, { now, source: 'jira.csv', note });
+    const lookups = text.split('\n').filter((l) => l.startsWith('field_json=$(curl '));
+    expect(lookups).toHaveLength(1);
+    expect(lookups[0]).toContain('/rest/api/2/field');
+    expect(text).toContain("resolve_field 'Story Points'");
+    expect(text).toContain("resolve_field 'Target end'");
+    expect(text).not.toContain("resolve_field 'SLA'");
+    expect(text).toContain('skipping Story points.');
+    expect(text).toContain('skipping Target end.');
+    expect(text).toContain('customfield_20001');
+    expect(text).toContain('Story Points: 5 to 8');
+    expect(text).toContain('Forecast End: 2026-11-13 to 2026-11-16');
+    expect(text.indexOf('field_json=$(curl ')).toBeLessThan(text.indexOf('/issue/A-1'));
+    expect(text.indexOf(': "${JIRA_PAT')).toBeLessThan(text.indexOf('field_json=$(curl '));
+  });
+
+  it('uses a filled-in field id and does not look that field up', () => {
+    const text = script([{ kind: 'storyPoints', key: 'A-1', from: 5, to: 8 }], {
+      storyPointsFieldName: 'Not the real name',
+    });
+    expect(text).not.toContain('field_json=');
+    expect(text).not.toContain('Not the real name');
+    expect(text).toContain('{"fields":{"customfield_10002":8}}');
+  });
+
+  it('lists story points, SLA, dates, and architect in the summary', () => {
+    const plan = planUpdates(changes, SETTINGS);
+    expect(updateSummary(plan)).toBe(
+      '3 issues will be updated (1 story point, 1 SLA, 2 dates, and 1 architect) and 2 rank moves made.',
+    );
+    const skipped = planUpdates(changes, {
+      ...SETTINGS,
+      exportRankChanges: false,
+      slaDaysField: '',
+      slaDaysFieldName: '',
+    });
+    expect(updateSummary(skipped)).toBe(
+      '2 issues will be updated (1 story point, 2 dates, and 1 architect). 3 changes cannot be sent yet (see Settings > Jira update file).',
+    );
+  });
+
+  it('resolves a field name when the script runs and still sends the other fields', () => {
+    const settings: ScriptSettings = {
+      ...SETTINGS,
+      storyPointsField: '',
+      architectField: '',
+      architectFieldType: 'text',
+    };
+    const text = buildJiraScript(
+      planUpdates(
+        [
+          { kind: 'storyPoints', key: 'A-1', from: 5, to: 8 },
+          { kind: 'slaDays', key: 'A-1', from: 2, to: 4 },
+          { kind: 'architect', key: 'A-1', from: '', to: { id: 's3', name: "Pat O'Brien" } },
+        ],
+        settings,
+      ),
+      settings,
+      { note: null },
+    );
+    const run = (fields: string) => {
+      const dir = mkdtempSync(join(tmpdir(), 'jira-script-'));
+      const curl = join(dir, 'curl');
+      const log = join(dir, 'curl.log');
+      writeFileSync(
+        curl,
+        `#!/bin/bash
+printf '%s\\n' "$*" >> ${JSON.stringify(log)}
+if [[ "$*" == *"/rest/api/2/field"* ]]; then
+  printf '%s' ${JSON.stringify(fields)}
+fi
+exit 0
+`,
+      );
+      chmodSync(curl, 0o755);
+      const script = join(dir, 'update.sh');
+      writeFileSync(script, text);
+      const result = spawnSync('bash', [script], {
+        env: { ...process.env, PATH: `${dir}:${process.env.PATH ?? ''}`, JIRA_PAT: 'token' },
+        encoding: 'utf8',
+      });
+      return {
+        status: result.status,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        log: readFileSync(log, 'utf8'),
+      };
+    };
+    const found = run(
+      '[{"id":"customfield_11111","name":"Story Points"},{"id":"customfield_33333","name":"Architect","schema":{"type":"string"}}]',
+    );
+    expect(found.status).toBe(0);
+    expect(found.stdout).toBe('');
+    expect(found.log).toContain('/rest/api/2/field');
+    expect(found.log).toContain(
+      '{"fields":{"customfield_11111":8,"customfield_20001":4,"customfield_33333":"Pat O\'Brien"}}',
+    );
+
+    const missing = run('[{"id":"customfield_22222","name":"Something else"}]');
+    expect(missing.status).toBe(0);
+    expect(missing.stdout).toContain("No Jira field named 'Story Points'; skipping Story points.");
+    expect(missing.stdout).toContain("No Jira field named 'Architect'; skipping Architect.");
+    expect(missing.log).toContain('{"fields":{"customfield_20001":4}}');
+    expect(missing.log).not.toContain('customfield_11111');
+  });
 });
 
 describe('older saved sessions', () => {
@@ -420,8 +584,13 @@ describe('older saved sessions', () => {
       exportRankChanges: true,
       exportForecastArchitects: false,
       exportForecastDates: true,
+      storyPointsFieldName: 'Story Points',
+      slaDaysFieldName: 'SLA',
+      architectFieldName: 'Architect',
       targetStartField: '',
+      targetStartFieldName: 'Target start',
       targetEndField: '',
+      targetEndFieldName: 'Target end',
     });
   });
 });

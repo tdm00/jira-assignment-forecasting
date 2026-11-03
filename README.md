@@ -71,11 +71,10 @@ are in [docs/requirements/08-scheduling-forecast.md](docs/requirements/08-schedu
 ### Writing changes back to Jira
 
 1. In **Settings > Jira update file**, check the Jira server (default
-   `https://jira.pncint.net`) and enter the field ids for story points, SLA days,
-   architect, target start and target end (`duedate` works for the Jira due date). List
-   them with
-   `curl -sS -H "Authorization: Bearer $JIRA_PAT" https://jira.pncint.net/rest/api/2/field`.
-   For a user picker architect field, enter each architect's Jira username.
+   `https://jira.pncint.net`). Each field has an id and a name. An id is used when it
+   is filled in (`duedate` works for the Jira due date). When the id is blank, the
+   script looks the id up by name (Story Points, SLA, Architect, Target start, Target
+   end). For a user picker architect field, enter each architect's Jira username.
 2. Click **Jira update file**. Edit the meeting notes (they start as "Based on a meeting
    on <today> at <time>, the following fields of this Jira issue were changed") and click
    **Download update file** to save `jira-updates-YYYY-MM-DD.sh`.
