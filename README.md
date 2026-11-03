@@ -119,7 +119,8 @@ Lint, format and typecheck: `npm run lint`, `npm run format:check`, `npm run typ
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs lint, format check, typecheck,
 unit and integration tests with coverage, the build, and the end-to-end tests on every push
 and pull request. It uploads `dist/index.html` as the `jira-gantt-forecaster` artifact.
-Pushing a `v*` tag also attaches the file to a GitHub release.
+A successful push to `main` publishes the next integer release (`v1`, `v2`, `v3`, …) and
+attaches that built file. Pull requests, manual runs, and tag pushes do not tag or release.
 
 ## Project structure
 
