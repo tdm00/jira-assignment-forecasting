@@ -294,18 +294,20 @@ describe('persistence and export', () => {
     const user = await setup();
     const updateFile = () => user.click(screen.getByRole('button', { name: /Jira update file/ }));
 
-    await user.click(screen.getByRole('tab', { name: 'Settings' }));
-    expect(screen.getByTestId('jira-jiraBaseUrl')).toHaveValue('');
-    expect(screen.getByTestId('jira-server-problem')).toHaveTextContent(/Enter the Jira server/);
+    await user.click(screen.getByRole('tab', { name: 'Jira' }));
+    expect(screen.getByTestId('jira-jiraBaseUrl')).toHaveValue('https://jira.example.com');
+    expect(screen.getByTestId('jira-server-problem')).toHaveTextContent(/only a placeholder/);
     await updateFile();
     expect(
-      screen.getAllByTestId('toast').find((t) => /Enter the Jira server/.test(t.textContent ?? '')),
+      screen.getAllByTestId('toast').find((t) => /only a placeholder/.test(t.textContent ?? '')),
     ).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    await user.type(screen.getByTestId('jira-jiraBaseUrl'), 'http://jira.example.com');
+    await user.clear(screen.getByTestId('jira-jiraBaseUrl'));
+    expect(screen.getByTestId('jira-server-problem')).toHaveTextContent(/Enter your Jira server/);
+    await user.type(screen.getByTestId('jira-jiraBaseUrl'), 'http://jira.test.invalid');
     expect(screen.getByTestId('jira-server-problem')).toHaveTextContent(/must use https/);
     await user.clear(screen.getByTestId('jira-jiraBaseUrl'));
-    await user.type(screen.getByTestId('jira-jiraBaseUrl'), 'jira.example.com');
+    await user.type(screen.getByTestId('jira-jiraBaseUrl'), 'jira.test.invalid');
     expect(screen.queryByTestId('jira-server-problem')).not.toBeInTheDocument();
     expect(screen.getByTestId('jira-storyPointsFieldName')).toHaveValue('Story Points');
     await user.click(screen.getByLabelText('Set target start and end to the forecast dates'));
@@ -355,8 +357,8 @@ describe('persistence and export', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     const text = await created[0]!.text();
     expect(text).toContain(`field_json=$(curl -sS --fail-with-body`);
-    expect(text).toContain(`'https://jira.example.com/rest/api/2/field'`);
-    expect(text).toContain(`'https://jira.example.com/rest/api/2/issue/A-1'`);
+    expect(text).toContain(`'https://jira.test.invalid/rest/api/2/field'`);
+    expect(text).toContain(`'https://jira.test.invalid/rest/api/2/issue/A-1'`);
     expect(text).toContain('customfield_10002');
     expect(text).toContain('duedate');
     expect(text).toContain(
@@ -372,7 +374,7 @@ describe('persistence and export', () => {
 
   it('asks for Jira usernames when the architect field is a user picker (REQ-JIRA-007)', async () => {
     const user = await setup();
-    await user.click(screen.getByRole('tab', { name: 'Settings' }));
+    await user.click(screen.getByRole('tab', { name: 'Jira' }));
     const username = screen.getByLabelText('Jira username for Alice Chen');
     expect(username).toBeInTheDocument();
     await user.clear(screen.getByTestId('jira-architectFieldName'));

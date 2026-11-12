@@ -11,6 +11,7 @@ import { parseJiraCsv } from '../../src/parsers/jiraCsv';
 import {
   buildJiraScript,
   commentSafe,
+  DEFAULT_JIRA_SERVER,
   commentText,
   commentedIssues,
   defaultNote,
@@ -26,7 +27,7 @@ import { defaultSettings, reducer } from '../../src/state/store';
 import { fixture, item, testSettings, testState } from '../helpers';
 
 const SETTINGS: ScriptSettings = {
-  jiraBaseUrl: 'https://jira.example.com',
+  jiraBaseUrl: 'https://jira.test.invalid',
   storyPointsField: 'customfield_10002',
   storyPointsFieldName: 'Story Points',
   slaDaysField: 'customfield_20001',
@@ -274,13 +275,13 @@ describe('curl script (REQ-JIRA-005 to REQ-JIRA-009, REQ-JIRA-012)', () => {
     }
     const [update, comment] = lines[0]!.split(' && ');
     expect(update).toBe(
-      `curl -sS --fail-with-body -X PUT 'https://jira.example.com/rest/api/2/issue/A-1' ` +
+      `curl -sS --fail-with-body -X PUT 'https://jira.test.invalid/rest/api/2/issue/A-1' ` +
         `-H "Authorization: Bearer $JIRA_PAT" -H 'Content-Type: application/json' ` +
         `--data '{"fields":{"customfield_10002":8,"customfield_20004":"2026-11-16"}}' ` +
         `-w 'A-1 Story points: 5 to 8; Target end: 2026-11-13 to 2026-11-16 -> HTTP %{http_code}\\n'`,
     );
     expect(comment).toBe(
-      `curl -sS -o /dev/null -X POST 'https://jira.example.com/rest/api/2/issue/A-1/comment' ` +
+      `curl -sS -o /dev/null -X POST 'https://jira.test.invalid/rest/api/2/issue/A-1/comment' ` +
         `-H "Authorization: Bearer $JIRA_PAT" -H 'Content-Type: application/json' ` +
         `--data '${JSON.stringify({
           body: `${note}\n\nStory Points: 5 to 8\nForecast End: 2026-11-13 to 2026-11-16`,
@@ -292,7 +293,7 @@ describe('curl script (REQ-JIRA-005 to REQ-JIRA-009, REQ-JIRA-012)', () => {
     expect(lines[2]).toContain('B_1_ok=0; curl ');
     expect(lines[2]).toContain(' && B_1_ok=1');
     expect(lines[2]).not.toContain('/comment');
-    expect(lines[3]).toContain(`'https://jira.example.com/rest/agile/1.0/issue/rank'`);
+    expect(lines[3]).toContain(`'https://jira.test.invalid/rest/agile/1.0/issue/rank'`);
     expect(lines[3]).toContain(`--data '{"issues":["U-1"],"rankBeforeIssue":"A-1"}'`);
     expect(lines[3]).toContain(`-w 'U-1 rank before A-1 -> HTTP %{http_code}\\n'`);
     expect(lines[3]).toContain(String.raw`Rank: start to before A-1`);
@@ -449,13 +450,17 @@ describe('curl script (REQ-JIRA-005 to REQ-JIRA-009, REQ-JIRA-012)', () => {
   });
 
   it('normalizes the server address', () => {
-    expect(normalizeBaseUrl(' jira.example.com/ ')).toBe('https://jira.example.com');
+    expect(normalizeBaseUrl(' jira.test.invalid/ ')).toBe('https://jira.test.invalid');
     expect(normalizeBaseUrl('http://jira.local:8080//')).toBe('http://jira.local:8080');
     expect(normalizeBaseUrl('')).toBe('');
   });
 
-  it('has no Jira server by default', () => {
-    expect(defaultSettings().jiraBaseUrl).toBe('');
+  it('uses the jira.example.com placeholder by default', () => {
+    expect(defaultSettings().jiraBaseUrl).toBe(DEFAULT_JIRA_SERVER);
+    expect(DEFAULT_JIRA_SERVER).toBe('https://jira.example.com');
+    expect(jiraServerProblem(DEFAULT_JIRA_SERVER)).toMatch(/only a placeholder/);
+    expect(jiraServerProblem('example.com')).toMatch(/only a placeholder/);
+    expect(jiraServerProblem('https://jira.notexample.com')).toBeNull();
   });
 
   it('keeps a blank id when a name is set and looks that name up once', () => {
@@ -507,7 +512,7 @@ describe('curl script (REQ-JIRA-005 to REQ-JIRA-009, REQ-JIRA-012)', () => {
       slaDaysFieldName: '',
     });
     expect(updateSummary(skipped)).toBe(
-      '2 issues will be updated (1 story point, 2 dates, and 1 architect). 3 changes cannot be sent yet (see Settings > Jira update file).',
+      '2 issues will be updated (1 story point, 2 dates, and 1 architect). 3 changes cannot be sent yet (see the Jira tab).',
     );
   });
 
@@ -581,7 +586,7 @@ describe('older saved sessions', () => {
   it('get the Jira update defaults', () => {
     const state = coerceState({ staff: [], vacations: [], closures: [], items: [], settings: {} });
     expect(state.settings).toMatchObject({
-      jiraBaseUrl: '',
+      jiraBaseUrl: DEFAULT_JIRA_SERVER,
       architectFieldType: 'user',
       exportRankChanges: true,
       exportForecastArchitects: false,
@@ -599,17 +604,17 @@ describe('older saved sessions', () => {
 
 describe('script safety', () => {
   it('only creates a script for an https Jira server', () => {
-    expect(jiraServerProblem('')).toMatch(/Enter the Jira server/);
-    expect(jiraServerProblem('jira.example.com')).toBeNull();
-    expect(jiraServerProblem('https://jira.example.com/jira/')).toBeNull();
-    expect(jiraServerProblem('http://jira.example.com')).toMatch(/must use https/);
+    expect(jiraServerProblem('')).toMatch(/Enter your Jira server/);
+    expect(jiraServerProblem('jira.test.invalid')).toBeNull();
+    expect(jiraServerProblem('https://jira.test.invalid/jira/')).toBeNull();
+    expect(jiraServerProblem('http://jira.test.invalid')).toMatch(/must use https/);
     expect(jiraServerProblem('http://localhost:8080')).toBeNull();
-    expect(jiraServerProblem('https://user:pw@jira.example.com')).toMatch(/user name/);
-    expect(jiraServerProblem('https://jira.example.com?x=1')).toMatch(/query/);
+    expect(jiraServerProblem('https://user:pw@jira.test.invalid')).toMatch(/user name/);
+    expect(jiraServerProblem('https://jira.test.invalid?x=1')).toMatch(/query/);
     expect(jiraServerProblem('https://bad host')).toMatch(/not a valid address/);
     expect(() =>
       buildJiraScript({ issues: [], ranks: [], skipped: [] }, { ...SETTINGS, jiraBaseUrl: '' }),
-    ).toThrow(/Enter the Jira server/);
+    ).toThrow(/Enter your Jira server/);
   });
 
   it('turns newlines in comment text into spaces', () => {

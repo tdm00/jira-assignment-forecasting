@@ -87,25 +87,25 @@ Changing a value and then setting it back is not a change.
 - The header repeats the meeting notes and lists changes that were left out and why. A
   guard line stops the script before any request when `JIRA_PAT` is not set.
 
-## Settings (Settings tab > Jira update file)
+## Settings (Jira tab)
 
-| Setting                 | Default        | Notes                                                                                      |
-| ----------------------- | -------------- | ------------------------------------------------------------------------------------------ |
-| Jira server             | blank          | Required. `https://` is added when missing; `http://` only for `localhost`.                |
-| Story points field id   | blank          | For example `customfield_10002`. A filled-in id wins over the name.                        |
-| Story points field name | `Story Points` | Used when the id is blank. Editable.                                                       |
-| SLA field id            | blank          |                                                                                            |
-| SLA field name          | `SLA`          | Used when the id is blank.                                                                 |
-| Architect field id      | blank          |                                                                                            |
-| Architect field name    | `Architect`    | Used when the id is blank.                                                                 |
-| Forecast start field id | blank          | For example the Advanced Roadmaps `Target start` custom field.                             |
-| Forecast start name     | `Target start` | Used when the id is blank.                                                                 |
-| Forecast end field id   | blank          | A `Target end` custom field, or `duedate` for the Jira due date.                           |
-| Forecast end name       | `Target end`   | Used when the id is blank.                                                                 |
-| Architect field type    | User picker    | User picker sends `{"name": username}`, select list `{"value": name}`, text the name.      |
-| Jira usernames          | -              | Shown per staff member when the architect field is a user picker and an id or name is set. |
-| Target dates            | on             | Set target start and end to the forecast dates.                                            |
-| Include plan order      | on             | Writes rank moves.                                                                         |
+| Setting                 | Default                    | Notes                                                                                             |
+| ----------------------- | -------------------------- | ------------------------------------------------------------------------------------------------- |
+| Jira server             | `https://jira.example.com` | A placeholder you must replace. `https://` is added when missing; `http://` only for `localhost`. |
+| Story points field id   | blank                      | For example `customfield_10002`. A filled-in id wins over the name.                               |
+| Story points field name | `Story Points`             | Used when the id is blank. Editable.                                                              |
+| SLA field id            | blank                      |                                                                                                   |
+| SLA field name          | `SLA`                      | Used when the id is blank.                                                                        |
+| Architect field id      | blank                      |                                                                                                   |
+| Architect field name    | `Architect`                | Used when the id is blank.                                                                        |
+| Forecast start field id | blank                      | For example the Advanced Roadmaps `Target start` custom field.                                    |
+| Forecast start name     | `Target start`             | Used when the id is blank.                                                                        |
+| Forecast end field id   | blank                      | A `Target end` custom field, or `duedate` for the Jira due date.                                  |
+| Forecast end name       | `Target end`               | Used when the id is blank.                                                                        |
+| Architect field type    | User picker                | User picker sends `{"name": username}`, select list `{"value": name}`, text the name.             |
+| Jira usernames          | -                          | Shown per staff member when the architect field is a user picker and an id or name is set.        |
+| Target dates            | on                         | Set target start and end to the forecast dates.                                                   |
+| Include plan order      | on                         | Writes rank moves.                                                                                |
 
 Names are saved with the project. Older saved sessions get these names when they are
 missing. An id, when present, is sent as-is. When the id is blank, the script looks
@@ -117,7 +117,8 @@ reported and does not block the download.
 
 The script sends your token to the Jira server, so the app refuses to create it until the
 server is a plain `https://` address with no user name, password, query or fragment
-(`http://` is allowed only for `localhost`). The download dialog shows that server.
+(`http://` is allowed only for `localhost`), and is not the `jira.example.com`
+placeholder. The download dialog shows that server.
 Values from the CSV files, the file name and the server appear in `#` comment lines;
 newlines and other control characters in them become spaces, so data can never start a
 new line of shell.

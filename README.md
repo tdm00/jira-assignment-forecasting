@@ -70,9 +70,9 @@ are in [docs/requirements/08-scheduling-forecast.md](docs/requirements/08-schedu
 
 ### Writing changes back to Jira
 
-1. In **Settings > Jira update file**, enter your Jira server (for example
-   `https://jira.example.com`). It must use `https://` (plain `http://` only for
-   `localhost`), because the script sends your token there. Each field has an id and a name. An id is used when it
+1. Open the **Jira** tab and replace the placeholder server `https://jira.example.com`
+   with your own. It must use `https://` (plain `http://` only for `localhost`), because
+   the script sends your token there. No update file is created until you do. Each field has an id and a name. An id is used when it
    is filled in (`duedate` works for the Jira due date). When the id is blank, the
    script looks the id up by name (Story Points, SLA, Architect, Target start, Target
    end). For a user picker architect field, enter each architect's Jira username.

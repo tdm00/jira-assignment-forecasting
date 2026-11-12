@@ -1,3 +1,4 @@
+import { DEFAULT_JIRA_SERVER } from './jiraScript';
 import { todayIso } from '../core/calendar';
 import { moveItem, moveWithinVisible, sortByRank } from '../core/rank';
 import type { Baseline } from '../core/compare';
@@ -67,8 +68,8 @@ export function defaultSettings(): Settings {
     assignmentMode: 'jira',
     poolPolicy: 'primary-preferred',
     backupThresholdDays: 5,
-    // Blank: each team enters its own server before creating an update file.
-    jiraBaseUrl: '',
+    // A placeholder: each team enters its own server in the Jira tab.
+    jiraBaseUrl: DEFAULT_JIRA_SERVER,
     storyPointsField: '',
     storyPointsFieldName: 'Story Points',
     slaDaysField: '',

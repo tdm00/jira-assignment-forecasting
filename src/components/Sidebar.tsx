@@ -9,7 +9,8 @@ import { SettingsPanel } from './SettingsPanel';
 import { StaffPanel } from './StaffPanel';
 import { VacationPanel } from './VacationPanel';
 
-export type SidebarTab = 'data' | 'staff' | 'crews' | 'vacations' | 'closures' | 'settings';
+export type SidebarTab =
+  'data' | 'staff' | 'crews' | 'vacations' | 'closures' | 'jira' | 'settings';
 
 const TABS: { id: SidebarTab; label: string }[] = [
   { id: 'data', label: 'Data' },
@@ -17,6 +18,7 @@ const TABS: { id: SidebarTab; label: string }[] = [
   { id: 'crews', label: 'Crews' },
   { id: 'vacations', label: 'Vacations' },
   { id: 'closures', label: 'Closures' },
+  { id: 'jira', label: 'Jira' },
   { id: 'settings', label: 'Settings' },
 ];
 
@@ -60,12 +62,10 @@ export function Sidebar({ state, dispatch, onFiles, onLoadSample }: Props) {
         {tab === 'crews' && <CrewPanel state={state} dispatch={dispatch} />}
         {tab === 'vacations' && <VacationPanel state={state} dispatch={dispatch} />}
         {tab === 'closures' && <HolidayPanel state={state} dispatch={dispatch} />}
-        {tab === 'settings' && (
-          <>
-            <SettingsPanel settings={state.settings} dispatch={dispatch} />
-            <JiraUpdatePanel settings={state.settings} staff={state.staff} dispatch={dispatch} />
-          </>
+        {tab === 'jira' && (
+          <JiraUpdatePanel settings={state.settings} staff={state.staff} dispatch={dispatch} />
         )}
+        {tab === 'settings' && <SettingsPanel settings={state.settings} dispatch={dispatch} />}
       </div>
     </aside>
   );
