@@ -91,6 +91,44 @@ export function normalizeBaseUrl(raw: string): string {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
 
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * Why the Jira server cannot receive the token, or null when it can. The script
+ * sends the personal access token to this address, so it must be a plain
+ * `https://` origin (plain `http://` only for this computer).
+ */
+export function jiraServerProblem(raw: string): string | null {
+  const base = normalizeBaseUrl(raw);
+  if (!base) return 'Enter the Jira server in Settings > Jira update file.';
+  let url: URL;
+  try {
+    url = new URL(base);
+  } catch {
+    return `The Jira server "${commentSafe(raw.trim())}" is not a valid address.`;
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    return 'The Jira server must not include a user name, password, query or #fragment.';
+  }
+  if (url.protocol === 'http:' && !LOCAL_HOSTS.has(url.hostname)) {
+    return 'The Jira server must use https:// so your token is not sent unencrypted.';
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    return 'The Jira server must start with https://.';
+  }
+  return null;
+}
+
+/**
+ * Text for a `#` comment line in the script. A newline (or any other control
+ * character) would end the comment and let the rest run as a command, so they
+ * become spaces.
+ */
+export function commentSafe(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  return value.replace(/[\u0000-\u001f\u007f\u0085\u2028\u2029]/g, ' ');
+}
+
 /** Single-quotes for bash and zsh; nothing inside is expanded. */
 export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -98,7 +136,8 @@ export function shellQuote(value: string): string {
 
 /** curl `-w` treats `%` and `\` as format characters. */
 function writeOutText(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/%/g, '%%');
+  // One line per curl, so each still works when pasted on its own.
+  return commentSafe(value).replace(/\\/g, '\\\\').replace(/%/g, '%%');
 }
 
 function curl(
@@ -353,6 +392,8 @@ export function buildJiraScript(
   settings: ScriptSettings,
   opts: { now?: Date; source?: string | null; note?: string | null } = {},
 ): string {
+  const problem = jiraServerProblem(settings.jiraBaseUrl);
+  if (problem) throw new Error(problem);
   const base = normalizeBaseUrl(settings.jiraBaseUrl);
   const withComment = opts.note !== null && opts.note !== undefined;
   const rankedKeys = new Set(plan.ranks.map((rank) => rank.key));
@@ -392,9 +433,20 @@ export function buildJiraScript(
     return `${rank} && [ "$${flag}" = 1 ] && ${comment}`;
   });
 
+  const header = buildHeader(plan, base, withComment, rankedKeys, opts);
+  return [...header, ...lookupLines(plan, base), ...issueLines, ...rankLines, ''].join('\n');
+}
+
+function buildHeader(
+  plan: UpdatePlan,
+  base: string,
+  withComment: boolean,
+  rankedKeys: Set<string>,
+  opts: { now?: Date; source?: string | null; note?: string | null },
+): string[] {
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const noteLines = withComment && opts.note!.trim() ? opts.note!.trim().split('\n') : [];
-  const header = [
+  const lines = [
     '#!/bin/bash',
     `# Jira updates from Jira Gantt Forecaster, generated ${(opts.now ?? new Date()).toISOString()}`,
     ...(opts.source ? [`# Jira export: ${opts.source}`] : []),
@@ -431,9 +483,12 @@ export function buildJiraScript(
           ...plan.skipped.map((s) => `#   ${describe(s.change)} (${s.reason})`),
         ]
       : []),
+  ];
+  // Every header line is a comment. Data in them (file name, server, names and
+  // values from the CSV) must not be able to start a new line of shell.
+  return [
+    ...lines.map((line) => (line.startsWith('#') ? commentSafe(line) : line)),
     '',
     `: "\${${PAT_VARIABLE}:?Set ${PAT_VARIABLE} to your Jira personal access token first}"`,
   ];
-
-  return [...header, ...lookupLines(plan, base), ...issueLines, ...rankLines, ''].join('\n');
 }

@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -10,9 +10,11 @@ import { AUTO_ASSIGN } from '../../src/core/types';
 import { parseJiraCsv } from '../../src/parsers/jiraCsv';
 import {
   buildJiraScript,
+  commentSafe,
   commentText,
   commentedIssues,
   defaultNote,
+  jiraServerProblem,
   normalizeBaseUrl,
   planUpdates,
   shellQuote,
@@ -20,11 +22,11 @@ import {
   type ScriptSettings,
 } from '../../src/state/jiraScript';
 import { coerceState } from '../../src/state/persistence';
-import { reducer } from '../../src/state/store';
+import { defaultSettings, reducer } from '../../src/state/store';
 import { fixture, item, testSettings, testState } from '../helpers';
 
 const SETTINGS: ScriptSettings = {
-  jiraBaseUrl: 'https://jira.pncint.net',
+  jiraBaseUrl: 'https://jira.example.com',
   storyPointsField: 'customfield_10002',
   storyPointsFieldName: 'Story Points',
   slaDaysField: 'customfield_20001',
@@ -272,13 +274,13 @@ describe('curl script (REQ-JIRA-005 to REQ-JIRA-009, REQ-JIRA-012)', () => {
     }
     const [update, comment] = lines[0]!.split(' && ');
     expect(update).toBe(
-      `curl -sS --fail-with-body -X PUT 'https://jira.pncint.net/rest/api/2/issue/A-1' ` +
+      `curl -sS --fail-with-body -X PUT 'https://jira.example.com/rest/api/2/issue/A-1' ` +
         `-H "Authorization: Bearer $JIRA_PAT" -H 'Content-Type: application/json' ` +
         `--data '{"fields":{"customfield_10002":8,"customfield_20004":"2026-11-16"}}' ` +
         `-w 'A-1 Story points: 5 to 8; Target end: 2026-11-13 to 2026-11-16 -> HTTP %{http_code}\\n'`,
     );
     expect(comment).toBe(
-      `curl -sS -o /dev/null -X POST 'https://jira.pncint.net/rest/api/2/issue/A-1/comment' ` +
+      `curl -sS -o /dev/null -X POST 'https://jira.example.com/rest/api/2/issue/A-1/comment' ` +
         `-H "Authorization: Bearer $JIRA_PAT" -H 'Content-Type: application/json' ` +
         `--data '${JSON.stringify({
           body: `${note}\n\nStory Points: 5 to 8\nForecast End: 2026-11-13 to 2026-11-16`,
@@ -290,7 +292,7 @@ describe('curl script (REQ-JIRA-005 to REQ-JIRA-009, REQ-JIRA-012)', () => {
     expect(lines[2]).toContain('B_1_ok=0; curl ');
     expect(lines[2]).toContain(' && B_1_ok=1');
     expect(lines[2]).not.toContain('/comment');
-    expect(lines[3]).toContain(`'https://jira.pncint.net/rest/agile/1.0/issue/rank'`);
+    expect(lines[3]).toContain(`'https://jira.example.com/rest/agile/1.0/issue/rank'`);
     expect(lines[3]).toContain(`--data '{"issues":["U-1"],"rankBeforeIssue":"A-1"}'`);
     expect(lines[3]).toContain(`-w 'U-1 rank before A-1 -> HTTP %{http_code}\\n'`);
     expect(lines[3]).toContain(String.raw`Rank: start to before A-1`);
@@ -447,13 +449,13 @@ describe('curl script (REQ-JIRA-005 to REQ-JIRA-009, REQ-JIRA-012)', () => {
   });
 
   it('normalizes the server address', () => {
-    expect(normalizeBaseUrl(' jira.pncint.net/ ')).toBe('https://jira.pncint.net');
+    expect(normalizeBaseUrl(' jira.example.com/ ')).toBe('https://jira.example.com');
     expect(normalizeBaseUrl('http://jira.local:8080//')).toBe('http://jira.local:8080');
     expect(normalizeBaseUrl('')).toBe('');
   });
 
-  it('targets jira.pncint.net by default', () => {
-    expect(testSettings().jiraBaseUrl).toBe('https://jira.pncint.net');
+  it('has no Jira server by default', () => {
+    expect(defaultSettings().jiraBaseUrl).toBe('');
   });
 
   it('keeps a blank id when a name is set and looks that name up once', () => {
@@ -579,7 +581,7 @@ describe('older saved sessions', () => {
   it('get the Jira update defaults', () => {
     const state = coerceState({ staff: [], vacations: [], closures: [], items: [], settings: {} });
     expect(state.settings).toMatchObject({
-      jiraBaseUrl: 'https://jira.pncint.net',
+      jiraBaseUrl: '',
       architectFieldType: 'user',
       exportRankChanges: true,
       exportForecastArchitects: false,
@@ -592,5 +594,62 @@ describe('older saved sessions', () => {
       targetEndField: '',
       targetEndFieldName: 'Target end',
     });
+  });
+});
+
+describe('script safety', () => {
+  it('only creates a script for an https Jira server', () => {
+    expect(jiraServerProblem('')).toMatch(/Enter the Jira server/);
+    expect(jiraServerProblem('jira.example.com')).toBeNull();
+    expect(jiraServerProblem('https://jira.example.com/jira/')).toBeNull();
+    expect(jiraServerProblem('http://jira.example.com')).toMatch(/must use https/);
+    expect(jiraServerProblem('http://localhost:8080')).toBeNull();
+    expect(jiraServerProblem('https://user:pw@jira.example.com')).toMatch(/user name/);
+    expect(jiraServerProblem('https://jira.example.com?x=1')).toMatch(/query/);
+    expect(jiraServerProblem('https://bad host')).toMatch(/not a valid address/);
+    expect(() =>
+      buildJiraScript({ issues: [], ranks: [], skipped: [] }, { ...SETTINGS, jiraBaseUrl: '' }),
+    ).toThrow(/Enter the Jira server/);
+  });
+
+  it('turns newlines in comment text into spaces', () => {
+    expect(commentSafe('a\nb\r\nc\u2028d\u0000e')).toBe('a b  c d e');
+  });
+
+  it('never runs data from the CSV, file name or note as shell (newline injection)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jira-inject-'));
+    const marker = join(dir, 'pwned');
+    const evil = `\ntouch ${marker}\n`;
+    const settings: ScriptSettings = { ...SETTINGS, slaDaysField: '', slaDaysFieldName: '' };
+    const plan = planUpdates(
+      [
+        { kind: 'storyPoints', key: 'A-1', from: 5, to: 8 },
+        // Skipped (no SLA field), so it is listed in a header comment.
+        { kind: 'slaDays', key: `B-1${evil}`, from: 2, to: 4 },
+        {
+          kind: 'architect',
+          key: 'C-1',
+          from: `Old${evil}`,
+          to: { id: 's9', name: `Eve${evil}` },
+        },
+      ],
+      settings,
+    );
+    const text = buildJiraScript(plan, settings, {
+      source: `export${evil}.csv`,
+      note: `Meeting${evil}notes`,
+    });
+    const curl = join(dir, 'curl');
+    writeFileSync(curl, '#!/bin/bash\nexit 0\n');
+    chmodSync(curl, 0o755);
+    const script = join(dir, 'update.sh');
+    writeFileSync(script, text);
+    const result = spawnSync('bash', [script], {
+      env: { ...process.env, PATH: `${dir}:${process.env.PATH ?? ''}`, JIRA_PAT: 'token' },
+      encoding: 'utf8',
+    });
+    expect(result.status).toBe(0);
+    expect(existsSync(marker)).toBe(false);
+    expect(text.split('\n').filter((line) => line.startsWith('touch'))).toEqual([]);
   });
 });

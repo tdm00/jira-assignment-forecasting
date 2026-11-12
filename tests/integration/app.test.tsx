@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../src/App';
@@ -259,7 +259,7 @@ describe('persistence and export', () => {
     const first = render(<App />);
     await user.upload(screen.getByTestId('file-input'), ALL.map(csv));
     await screen.findByTestId('row-A-1');
-    expect(localStorage.getItem(STORAGE_KEY)).toContain('A-1');
+    await waitFor(() => expect(localStorage.getItem(STORAGE_KEY)).toContain('A-1'));
     first.unmount();
     render(<App />);
     expect(screen.getAllByTestId(/^row-/)).toHaveLength(4);
@@ -295,7 +295,18 @@ describe('persistence and export', () => {
     const updateFile = () => user.click(screen.getByRole('button', { name: /Jira update file/ }));
 
     await user.click(screen.getByRole('tab', { name: 'Settings' }));
-    expect(screen.getByTestId('jira-jiraBaseUrl')).toHaveValue('https://jira.pncint.net');
+    expect(screen.getByTestId('jira-jiraBaseUrl')).toHaveValue('');
+    expect(screen.getByTestId('jira-server-problem')).toHaveTextContent(/Enter the Jira server/);
+    await updateFile();
+    expect(
+      screen.getAllByTestId('toast').find((t) => /Enter the Jira server/.test(t.textContent ?? '')),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await user.type(screen.getByTestId('jira-jiraBaseUrl'), 'http://jira.example.com');
+    expect(screen.getByTestId('jira-server-problem')).toHaveTextContent(/must use https/);
+    await user.clear(screen.getByTestId('jira-jiraBaseUrl'));
+    await user.type(screen.getByTestId('jira-jiraBaseUrl'), 'jira.example.com');
+    expect(screen.queryByTestId('jira-server-problem')).not.toBeInTheDocument();
     expect(screen.getByTestId('jira-storyPointsFieldName')).toHaveValue('Story Points');
     await user.click(screen.getByLabelText('Set target start and end to the forecast dates'));
     await updateFile();
@@ -344,8 +355,8 @@ describe('persistence and export', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     const text = await created[0]!.text();
     expect(text).toContain(`field_json=$(curl -sS --fail-with-body`);
-    expect(text).toContain(`'https://jira.pncint.net/rest/api/2/field'`);
-    expect(text).toContain(`'https://jira.pncint.net/rest/api/2/issue/A-1'`);
+    expect(text).toContain(`'https://jira.example.com/rest/api/2/field'`);
+    expect(text).toContain(`'https://jira.example.com/rest/api/2/issue/A-1'`);
     expect(text).toContain('customfield_10002');
     expect(text).toContain('duedate');
     expect(text).toContain(

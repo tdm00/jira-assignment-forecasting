@@ -67,7 +67,8 @@ export function defaultSettings(): Settings {
     assignmentMode: 'jira',
     poolPolicy: 'primary-preferred',
     backupThresholdDays: 5,
-    jiraBaseUrl: 'https://jira.pncint.net',
+    // Blank: each team enters its own server before creating an update file.
+    jiraBaseUrl: '',
     storyPointsField: '',
     storyPointsFieldName: 'Story Points',
     slaDaysField: '',

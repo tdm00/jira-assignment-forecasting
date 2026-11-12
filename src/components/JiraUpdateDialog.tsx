@@ -3,12 +3,14 @@ import { commentText, commentedIssues, updateSummary, type UpdatePlan } from '..
 
 interface Props {
   plan: UpdatePlan;
+  /** Where the script sends the token. */
+  server: string;
   defaultNote: string;
   onCancel: () => void;
   onConfirm: (note: string | null) => void;
 }
 
-export function JiraUpdateDialog({ plan, defaultNote, onCancel, onConfirm }: Props) {
+export function JiraUpdateDialog({ plan, server, defaultNote, onCancel, onConfirm }: Props) {
   const [note, setNote] = useState(defaultNote);
   const [addComment, setAddComment] = useState(true);
   const area = useRef<HTMLTextAreaElement>(null);
@@ -36,6 +38,10 @@ export function JiraUpdateDialog({ plan, defaultNote, onCancel, onConfirm }: Pro
         </h2>
         <p className="hint" data-testid="update-summary">
           {updateSummary(plan)}
+        </p>
+        <p className="hint" data-testid="update-server">
+          Sends your token to <strong>{server}</strong>. Check this is your Jira server before you
+          run the file.
         </p>
         <label className="check">
           <input

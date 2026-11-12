@@ -42,7 +42,14 @@ import { schedule, summarize, type ScheduleInput } from './core/scheduler';
 import type { Filters } from './core/types';
 import { SAMPLE_FILES } from './sample';
 import { importFiles, type NamedText } from './state/importFile';
-import { buildJiraScript, defaultNote, planUpdates, type UpdatePlan } from './state/jiraScript';
+import {
+  buildJiraScript,
+  defaultNote,
+  jiraServerProblem,
+  normalizeBaseUrl,
+  planUpdates,
+  type UpdatePlan,
+} from './state/jiraScript';
 import {
   clearSaved,
   downloadFile,
@@ -70,6 +77,9 @@ function initialTheme(storage: Storage | undefined): Theme {
     ? 'dark'
     : 'light';
 }
+
+/** Pause before an edit is written to browser storage. */
+const SAVE_DELAY_MS = 400;
 
 interface FocusState {
   staffId: string | null;
@@ -112,12 +122,34 @@ export default function App({ initial, storage = safeStorage() }: Props) {
     );
   }, []);
 
-  useEffect(() => {
-    if (!saveState(state, storage) && !storageWarned.current) {
+  // Saving serializes the whole project, so wait for a pause in typing or
+  // dragging. Leaving or hiding the page saves straight away.
+  const latestState = useRef(state);
+  const saveNow = useCallback(() => {
+    if (!saveState(latestState.current, storage) && !storageWarned.current) {
       storageWarned.current = true;
       notify('Browser storage is unavailable. Export the project to keep your work.', 'warning');
     }
-  }, [state, storage, notify]);
+  }, [storage, notify]);
+
+  useEffect(() => {
+    latestState.current = state;
+    const timer = setTimeout(saveNow, SAVE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [state, saveNow]);
+
+  useEffect(() => {
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') saveNow();
+    };
+    window.addEventListener('pagehide', saveNow);
+    document.addEventListener('visibilitychange', onHidden);
+    return () => {
+      window.removeEventListener('pagehide', saveNow);
+      document.removeEventListener('visibilitychange', onHidden);
+      saveNow();
+    };
+  }, [saveNow]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -185,7 +217,11 @@ export default function App({ initial, storage = safeStorage() }: Props) {
   const scheduled = useMemo(
     () =>
       scoped && focusStaffId
-        ? schedule({ ...scheduleInput, scope: { staffId: focusStaffId, crews: selectedKeys } })
+        ? schedule({
+            ...scheduleInput,
+            teamPlan: fullScheduled,
+            scope: { staffId: focusStaffId, crews: selectedKeys },
+          })
         : fullScheduled,
     [scoped, focusStaffId, selectedKeys, scheduleInput, fullScheduled],
   );
@@ -213,9 +249,13 @@ export default function App({ initial, storage = safeStorage() }: Props) {
   const previous = useMemo(
     () =>
       scoped && focusStaffId && focus.prevCrews
-        ? schedule({ ...scheduleInput, scope: { staffId: focusStaffId, crews: focus.prevCrews } })
+        ? schedule({
+            ...scheduleInput,
+            teamPlan: fullScheduled,
+            scope: { staffId: focusStaffId, crews: focus.prevCrews },
+          })
         : null,
-    [scoped, focusStaffId, focus.prevCrews, scheduleInput],
+    [scoped, focusStaffId, focus.prevCrews, scheduleInput, fullScheduled],
   );
   const reference = useMemo<Reference | null>(() => {
     if (scoped) return previous ? makeReference(previous, 'previous crew selection') : null;
@@ -309,6 +349,11 @@ export default function App({ initial, storage = safeStorage() }: Props) {
           notify('Plan exported as CSV', 'success');
         }}
         onExportJira={() => {
+          const serverProblem = jiraServerProblem(state.settings.jiraBaseUrl);
+          if (serverProblem) {
+            notify(serverProblem, 'error');
+            return;
+          }
           const changes = jiraChanges({
             items: state.items,
             staff: state.staff,
@@ -462,6 +507,7 @@ export default function App({ initial, storage = safeStorage() }: Props) {
       {jiraPlan && (
         <JiraUpdateDialog
           plan={jiraPlan}
+          server={normalizeBaseUrl(state.settings.jiraBaseUrl)}
           defaultNote={defaultNote()}
           onCancel={() => setJiraPlan(null)}
           onConfirm={(note) => {

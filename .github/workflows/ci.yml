@@ -3,7 +3,6 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -12,7 +11,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded PR runs only. A run on main publishes a release, so let it finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test-and-build:
@@ -79,8 +79,7 @@ jobs:
   release:
     name: Publish next release
     needs: test-and-build
-    # v* tags still start CI. Publish only after a successful push to main so
-    # creating vN does not create another tag or release.
+    # Publish only after a successful push to main.
     if: needs.test-and-build.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
