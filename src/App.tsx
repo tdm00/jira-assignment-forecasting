@@ -367,7 +367,7 @@ export default function App({ initial, storage = safeStorage() }: Props) {
           const plan = planUpdates(changes, state.settings);
           if (!plan.issues.length && !plan.ranks.length) {
             notify(
-              `No Jira updates to export: ${plan.skipped.length} left out (see Settings > Jira update file)`,
+              `No Jira updates to export: ${plan.skipped.length} left out (see the Jira tab)`,
               'warning',
             );
             return;
@@ -524,7 +524,7 @@ export default function App({ initial, storage = safeStorage() }: Props) {
                 : []),
             ];
             notify(
-              `Jira update file downloaded: ${parts.join(', ')}${skipped.length ? `, ${skipped.length} left out (see Settings > Jira update file)` : ''}`,
+              `Jira update file downloaded: ${parts.join(', ')}${skipped.length ? `, ${skipped.length} left out (see the Jira tab)` : ''}`,
               skipped.length ? 'warning' : 'success',
             );
             setJiraPlan(null);

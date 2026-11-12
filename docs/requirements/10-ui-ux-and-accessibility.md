@@ -3,8 +3,8 @@
 ## Layout
 
 - **Header** - app name, project actions (import, export, clear), theme toggle.
-- **Sidebar** - tabbed panels: Data (drop zone and loaded files), Staff,
-  Vacations, Closures, Settings.
+- **Sidebar** - tabbed panels: Data (drop zone and loaded files), Staff, Crews,
+  Vacations, Closures, Jira (server and update file settings), Settings.
 - **Main area** - summary cards, filter bar, and the combined grid and Gantt.
 
 ## Requirements

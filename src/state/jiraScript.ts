@@ -91,6 +91,9 @@ export function normalizeBaseUrl(raw: string): string {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
 
+/** Placeholder shown until a team enters its own server. A script is never created for it. */
+export const DEFAULT_JIRA_SERVER = 'https://jira.example.com';
+
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 /**
@@ -100,7 +103,7 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
  */
 export function jiraServerProblem(raw: string): string | null {
   const base = normalizeBaseUrl(raw);
-  if (!base) return 'Enter the Jira server in Settings > Jira update file.';
+  if (!base) return 'Enter your Jira server in the Jira tab.';
   let url: URL;
   try {
     url = new URL(base);
@@ -115,6 +118,9 @@ export function jiraServerProblem(raw: string): string | null {
   }
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     return 'The Jira server must start with https://.';
+  }
+  if (url.hostname === 'example.com' || url.hostname.endsWith('.example.com')) {
+    return `Set your Jira server in the Jira tab. ${new URL(DEFAULT_JIRA_SERVER).hostname} is only a placeholder.`;
   }
   return null;
 }
@@ -377,7 +383,7 @@ export function updateSummary(plan: UpdatePlan): string {
   const detail = bits.length ? ` (${joinList(bits)})` : '';
   const ranks = plan.ranks.length ? ` and ${plural(plan.ranks.length, 'rank move')} made` : '';
   const skipped = plan.skipped.length
-    ? ` ${plural(plan.skipped.length, 'change')} cannot be sent yet (see Settings > Jira update file).`
+    ? ` ${plural(plan.skipped.length, 'change')} cannot be sent yet (see the Jira tab).`
     : '';
   return `${plural(plan.issues.length, 'issue')} will be updated${detail}${ranks}.${skipped}`;
 }
@@ -474,7 +480,7 @@ function buildHeader(
     '# before them. Each line prints what it changed and the HTTP status',
     '# (204 = fields updated, 201 = comment added).',
     '#',
-    '# List field ids to configure Settings > Jira update file:',
+    '# List field ids to configure the Jira tab:',
     `#   curl -sS -H "Authorization: Bearer $${PAT_VARIABLE}" ${shellQuote(`${base}/rest/api/2/field`)}`,
     ...(plan.skipped.length
       ? [
