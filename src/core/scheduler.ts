@@ -30,17 +30,41 @@ export function findStaffMember(staff: StaffMember[], value: string): StaffMembe
   );
 }
 
+/** Staff lookups by id, display name and Jira username, built once per forecast. */
+interface StaffIndex {
+  byId: Map<string, StaffMember>;
+  find: (value: string) => StaffMember | undefined;
+}
+
+function indexStaff(staff: StaffMember[]): StaffIndex {
+  const byId = new Map<string, StaffMember>();
+  const byName = new Map<string, StaffMember>();
+  const byUsername = new Map<string, StaffMember>();
+  // First match wins, as in findStaffMember.
+  for (const s of staff) {
+    if (!byId.has(s.id)) byId.set(s.id, s);
+    const name = normalizeName(s.name);
+    if (!byName.has(name)) byName.set(name, s);
+    if (s.jiraUsername !== undefined) {
+      const user = normalizeName(s.jiraUsername);
+      if (!byUsername.has(user)) byUsername.set(user, s);
+    }
+  }
+  return {
+    byId,
+    find: (value) => {
+      const key = normalizeName(value);
+      return key ? (byName.get(key) ?? byUsername.get(key)) : undefined;
+    },
+  };
+}
+
 /** Default grid label for the architect stored on the Jira item. */
 export function architectLabel(architect: string, staff: StaffMember[]): string {
   const value = architect.trim();
   if (!value) return 'Unassigned';
   const match = findStaffMember(staff, value);
   return match ? match.name : `${value} (not in staff)`;
-}
-
-function statusIn(status: string, list: string[]): boolean {
-  const s = normalizeName(status);
-  return list.some((x) => normalizeName(x) === s);
 }
 
 export function estimateDays(item: JiraItem, daysPerPoint: number): number | null {
@@ -59,17 +83,18 @@ type Resolved =
 
 export function resolveArchitect(
   item: JiraItem,
-  staff: StaffMember[],
+  staff: StaffMember[] | StaffIndex,
   autoAssign: boolean,
 ): Resolved {
+  const index = Array.isArray(staff) ? indexStaff(staff) : staff;
   if (item.architectOverride === AUTO_ASSIGN) return { kind: 'auto' };
   if (item.architectOverride) {
-    const s = staff.find((x) => x.id === item.architectOverride);
+    const s = index.byId.get(item.architectOverride);
     if (s) return { kind: 'staff', staff: s };
   }
   const name = item.architect.trim();
   if (!name) return autoAssign ? { kind: 'auto' } : { kind: 'none' };
-  const s = findStaffMember(staff, name);
+  const s = index.find(name);
   return s ? { kind: 'staff', staff: s } : { kind: 'unknown', name };
 }
 
@@ -94,6 +119,11 @@ export interface ScheduleInput {
   scope?: ScheduleScope;
   /** Earliest start per item key; used to keep pool `availableFrom` dates when scoping. */
   notBefore?: Record<string, IsoDate>;
+  /**
+   * The team-wide forecast for the same input without `scope`, when the caller
+   * already has it. A scoped forecast then skips computing it again.
+   */
+  teamPlan?: Map<string, ScheduledItem>;
 }
 
 /** Normalized crew name. Items without a crew use the empty string. */
@@ -108,11 +138,13 @@ export function poolFor(
 ): { staff: StaffMember; assignment: CrewAssignment }[] {
   const key = crewKey(crew);
   if (!key) return [];
+  const byId = new Map<string, StaffMember>();
+  for (const s of staff) if (!byId.has(s.id)) byId.set(s.id, s);
   return assignments
     .filter((a) => a.enabled && crewKey(a.crew) === key)
     .sort((a, b) => a.role - b.role)
     .flatMap((assignment) => {
-      const member = staff.find((s) => s.id === assignment.staffId);
+      const member = byId.get(assignment.staffId);
       return member ? [{ staff: member, assignment }] : [];
     });
 }
@@ -127,6 +159,19 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
   const assignments = input.crewAssignments ?? [];
   const cal = new WorkCalendar(closures, vacations);
   const forecastStart = settings.forecastStart;
+  const index = indexStaff(staff);
+  const doneStatuses = new Set(settings.doneStatuses.map(normalizeName));
+  const inProgressStatuses = new Set(settings.inProgressStatuses.map(normalizeName));
+  const pools = new Map<string, ReturnType<typeof poolFor>>();
+  const poolOf = (crew: string) => {
+    const key = crewKey(crew);
+    let pool = pools.get(key);
+    if (!pool) {
+      pool = poolFor(crew, assignments, staff);
+      pools.set(key, pool);
+    }
+    return pool;
+  };
   /** Next free calendar day for each capacity bucket (staff id or unknown name). */
   const free = new Map<string, IsoDate>();
   const result = new Map<string, ScheduledItem>();
@@ -176,7 +221,7 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
   }
 
   const choose = (item: JiraItem, isInProgress: boolean, base: IsoDate): Choice => {
-    const jira = resolveArchitect(item, staff, settings.autoAssign);
+    const jira = resolveArchitect(item, index, settings.autoAssign);
     const staffOnly = (): Candidate[] =>
       staff.map((s) => ({ staff: s, start: earliestStart(s.id, s.id, base) }));
     const auto = (extraFlags: FlagCode[] = []): Choice => {
@@ -200,7 +245,7 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
     if (settings.assignmentMode === 'crew-pool') {
       const keepsJiraArchitect = isInProgress && (jira.kind === 'staff' || jira.kind === 'unknown');
       if (!keepsJiraArchitect) {
-        const pool = poolFor(item.crew, assignments, staff);
+        const pool = poolOf(item.crew);
         if (pool.length) {
           const cands = pool.map(({ staff: member, assignment }) => ({
             staff: member,
@@ -239,8 +284,9 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
   const planned: JiraItem[] = [];
 
   for (const item of items) {
-    const resolved = resolveArchitect(item, staff, settings.autoAssign);
-    if (statusIn(item.status, settings.doneStatuses)) {
+    const resolved = resolveArchitect(item, index, settings.autoAssign);
+    const status = normalizeName(item.status);
+    if (doneStatuses.has(status)) {
       const start = item.startDate ?? item.endDate;
       const end = item.endDate ?? item.startDate;
       const staffId = resolved.kind === 'staff' ? resolved.staff.id : null;
@@ -256,7 +302,7 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
         workingDays: start && end && start <= end ? cal.countWorkingDays(start, end, staffId) : 0,
         flags: [],
       });
-    } else if (statusIn(item.status, settings.inProgressStatuses)) {
+    } else if (inProgressStatuses.has(status)) {
       inProgress.push(item);
     } else {
       planned.push(item);
@@ -320,8 +366,8 @@ export function schedule(input: ScheduleInput): Map<string, ScheduledItem> {
 }
 
 function scheduleScoped(input: ScheduleInput, scope: ScheduleScope): Map<string, ScheduledItem> {
-  const rest: ScheduleInput = { ...input, scope: undefined };
-  const full = schedule(rest);
+  const rest: ScheduleInput = { ...input, scope: undefined, teamPlan: undefined };
+  const full = input.teamPlan ?? schedule(rest);
   const crews = new Set(scope.crews.map(crewKey));
   const mine = input.items.filter(
     (i) => full.get(i.key)?.staffId === scope.staffId && crews.has(crewKey(i.crew)),

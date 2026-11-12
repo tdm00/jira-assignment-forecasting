@@ -209,6 +209,28 @@ describe('persistence (REQ-PER-001..008)', () => {
     expect(rows[2]).toContain('yes');
     expect(rows[2]).toContain('Alice Chen');
   });
+
+  it('escapes cells that a spreadsheet would run as a formula', () => {
+    const s = withStaff();
+    const items = [item({ key: 'F', summary: '=HYPERLINK("http://x","y")', slaDays: 1 })];
+    const rows = parseCsv(exportPlanCsv(items, schedule({ ...s, items })));
+    expect(rows[1]).toContain(`'=HYPERLINK("http://x","y")`);
+  });
+
+  it('keeps a valid saved baseline and drops a malformed one', () => {
+    const base = { staff: [], vacations: [], closures: [], items: [] };
+    const baseline = {
+      label: 'baseline',
+      finish: '2026-12-01',
+      takenAt: '2026-11-01T00:00:00.000Z',
+      items: { 'A-1': { start: '2026-11-09', end: '2026-11-12', architect: 'Alice Chen' } },
+    };
+    expect(coerceState({ ...base, baseline }).baseline).toEqual(baseline);
+    expect(coerceState({ ...base, baseline: { items: [] } }).baseline).toBeNull();
+    expect(
+      coerceState({ ...base, baseline: { ...baseline, items: { 'A-1': { start: 5 } } } }).baseline,
+    ).toBeNull();
+  });
 });
 
 describe('importText / importFiles', () => {

@@ -1,7 +1,7 @@
 import type { Dispatch } from 'react';
 import { sortStaffByName } from '../core/filters';
 import type { ArchitectFieldType, Settings, StaffMember } from '../core/types';
-import { PAT_VARIABLE } from '../state/jiraScript';
+import { jiraServerProblem, PAT_VARIABLE } from '../state/jiraScript';
 import type { Action } from '../state/store';
 
 interface Props {
@@ -59,6 +59,7 @@ const FIELD_PAIRS: {
 ];
 
 export function JiraUpdatePanel({ settings, staff, dispatch }: Props) {
+  const serverProblem = jiraServerProblem(settings.jiraBaseUrl);
   const update = (patch: Partial<Settings>) => dispatch({ type: 'updateSettings', patch });
   const needsUsernames =
     settings.architectFieldType === 'user' &&
@@ -86,6 +87,11 @@ export function JiraUpdatePanel({ settings, staff, dispatch }: Props) {
             data-testid="jira-jiraBaseUrl"
             onChange={(e) => update({ jiraBaseUrl: e.target.value })}
           />
+          {serverProblem && (
+            <span className="hint" role="alert" data-testid="jira-server-problem">
+              {serverProblem}
+            </span>
+          )}
         </label>
         {FIELD_PAIRS.map((f) => (
           <div key={f.idKey} className="field-row">

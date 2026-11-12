@@ -144,8 +144,10 @@ test.describe('forecasting workflow', () => {
   }) => {
     await page.getByTestId('sp-A-1').fill('13');
     await page.getByRole('tab', { name: 'Settings' }).click();
+    await page.getByTestId('jira-jiraBaseUrl').fill('https://jira.example.com');
     await page.getByTestId('jira-storyPointsField').fill('customfield_10002');
     await page.getByRole('button', { name: 'Jira update file' }).click();
+    await expect(page.getByTestId('update-server')).toContainText('https://jira.example.com');
     await page.getByLabel('Meeting notes').fill('Based on a meeting on October 20');
     const [script] = await Promise.all([
       page.waitForEvent('download'),
@@ -154,7 +156,7 @@ test.describe('forecasting workflow', () => {
     expect(script.suggestedFilename()).toMatch(/^jira-updates-.*\.sh$/);
     const text = readFileSync((await script.path())!, 'utf8');
     expect(text).toContain(
-      `curl -sS --fail-with-body -X PUT 'https://jira.pncint.net/rest/api/2/issue/A-1' -H "Authorization: Bearer $JIRA_PAT"`,
+      `curl -sS --fail-with-body -X PUT 'https://jira.example.com/rest/api/2/issue/A-1' -H "Authorization: Bearer $JIRA_PAT"`,
     );
     expect(text).toContain('field_json=$(curl ');
     expect(text).toContain('customfield_10002');

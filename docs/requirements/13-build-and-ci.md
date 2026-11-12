@@ -9,9 +9,11 @@
 ## Continuous integration
 
 The GitHub Actions workflow [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
-runs on every push and pull request. A successful push to `main` publishes the next
-`v<integer>` release (`v1`, `v2`, `v3`, …) with the built file. Pull requests, manual
-runs, and `v*` tag pushes do not publish another release.
+runs on every pull request and every push to `main`. A successful push to `main`
+publishes the next `v<integer>` release (`v1`, `v2`, `v3`, …) with the built file. Pull
+requests and manual runs do not publish a release, and tag pushes do not start CI. A new
+run on a pull request cancels the older one; runs on `main` always finish so no release
+is skipped. `dist/` is a build output and is not committed.
 
 ```mermaid
 flowchart LR

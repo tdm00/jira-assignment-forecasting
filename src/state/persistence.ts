@@ -17,6 +17,29 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
+const isDateOrNull = (v: unknown) => v === null || typeof v === 'string';
+
+/** A saved baseline, or null when it is missing or not the expected shape. */
+function coerceBaseline(raw: unknown): AppState['baseline'] {
+  if (!isObject(raw) || !isObject(raw.items)) return null;
+  if (typeof raw.takenAt !== 'string' || !isDateOrNull(raw.finish)) return null;
+  const items: NonNullable<AppState['baseline']>['items'] = {};
+  for (const [key, entry] of Object.entries(raw.items)) {
+    if (!isObject(entry) || !isDateOrNull(entry.start) || !isDateOrNull(entry.end)) return null;
+    items[key] = {
+      start: entry.start as string | null,
+      end: entry.end as string | null,
+      architect: typeof entry.architect === 'string' ? entry.architect : '',
+    };
+  }
+  return {
+    label: typeof raw.label === 'string' ? raw.label : 'baseline',
+    finish: raw.finish as string | null,
+    takenAt: raw.takenAt,
+    items,
+  };
+}
+
 /** Validates the overall shape and fills defaults for any missing settings. */
 export function coerceState(raw: unknown): AppState {
   if (!isObject(raw)) throw new Error('Project data is not an object');
@@ -38,7 +61,7 @@ export function coerceState(raw: unknown): AppState {
     crewAssignments: Array.isArray(raw.crewAssignments)
       ? (raw.crewAssignments as AppState['crewAssignments'])
       : [],
-    baseline: isObject(raw.baseline) ? (raw.baseline as unknown as AppState['baseline']) : null,
+    baseline: coerceBaseline(raw.baseline),
   };
 }
 
@@ -128,7 +151,8 @@ export function exportPlanCsv(items: JiraItem[], scheduled: Map<string, Schedule
       Rank: item.rank,
     };
   });
-  return Papa.unparse(rows);
+  // A cell starting with = + - @ would run as a formula in Excel or Sheets.
+  return Papa.unparse(rows, { escapeFormulae: true });
 }
 
 export function downloadFile(fileName: string, content: string, mime: string): void {

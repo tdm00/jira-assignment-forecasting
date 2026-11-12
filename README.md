@@ -70,8 +70,9 @@ are in [docs/requirements/08-scheduling-forecast.md](docs/requirements/08-schedu
 
 ### Writing changes back to Jira
 
-1. In **Settings > Jira update file**, check the Jira server (default
-   `https://jira.pncint.net`). Each field has an id and a name. An id is used when it
+1. In **Settings > Jira update file**, enter your Jira server (for example
+   `https://jira.example.com`). It must use `https://` (plain `http://` only for
+   `localhost`), because the script sends your token there. Each field has an id and a name. An id is used when it
    is filled in (`duedate` works for the Jira due date). When the id is blank, the
    script looks the id up by name (Story Points, SLA, Architect, Target start, Target
    end). For a user picker architect field, enter each architect's Jira username.
@@ -119,7 +120,8 @@ Lint, format and typecheck: `npm run lint`, `npm run format:check`, `npm run typ
 unit and integration tests with coverage, the build, and the end-to-end tests on every push
 and pull request. It uploads `dist/index.html` as the `jira-gantt-forecaster` artifact.
 A successful push to `main` publishes the next integer release (`v1`, `v2`, `v3`, …) and
-attaches that built file. Pull requests, manual runs, and tag pushes do not tag or release.
+attaches that built file. Pull requests and manual runs do not tag or release. Tag pushes do
+not start CI. `dist/` is a build output and is not committed.
 
 ## Project structure
 
