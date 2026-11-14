@@ -1,28 +1,44 @@
 name: CI
 
+# test     -> every pull request and every push to main.
+# release  -> push to main only. release-please opens or updates the release PR, or, when that
+#             PR has just merged, creates the vX.Y.Z tag and GitHub Release and attaches the
+#             single-file app that the test job built from that same commit.
+# deploy   -> only when a release was created (or a manual rollback). Publishes the HTML attached
+#             to that release to GitHub Pages, never a fresh build, then smoke-tests the live site.
+# Rollback -> Actions > CI > Run workflow with an existing tag, or:
+#             gh workflow run ci.yml -f tag=vX.Y.Z
+
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to redeploy to GitHub Pages (rollback), for example v5.1.0
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  # Cancel superseded PR runs only. A run on main publishes a release, so let it finish.
+  # Cancel superseded PR runs. Runs on main and manual rollbacks each get their own group so
+  # none of them is ever dropped; the release and deploy jobs queue through their own groups.
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test-and-build:
-    name: Lint, test and build
+  test:
+    name: test
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -52,7 +68,7 @@ jobs:
         run: npm run test:e2e
 
       - name: Upload app artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: jira-gantt-forecaster
           path: dist/index.html
@@ -60,7 +76,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-report
           path: coverage/
@@ -68,7 +84,7 @@ jobs:
 
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-report
           path: |
@@ -77,59 +93,127 @@ jobs:
           if-no-files-found: ignore
 
   release:
-    name: Publish next release
-    needs: test-and-build
-    # Publish only after a successful push to main.
-    if: needs.test-and-build.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: release
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: release-jira-gantt-forecaster
+      cancel-in-progress: false
     permissions:
-      actions: read
       contents: write
+    outputs:
+      release_created: ${{ steps.release-please.outputs.release_created }}
+      tag_name: ${{ steps.release-please.outputs.tag_name }}
     steps:
-      - uses: actions/checkout@v5
+      # A fine-grained PAT (not GITHUB_TOKEN), so CI runs on the release PR and it can auto-merge.
+      - name: Run release-please
+        id: release-please
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
-          ref: ${{ github.sha }}
-          fetch-tags: true
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
 
-      - uses: actions/download-artifact@v8
+      - name: Download tested app
+        if: steps.release-please.outputs.release_created == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jira-gantt-forecaster
           path: release-asset
 
-      - name: Tag and publish release
+      - name: Attach app to the release
+        if: steps.release-please.outputs.release_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release-please.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          asset="jira-gantt-forecaster-${TAG}.html"
+          mv release-asset/index.html "${asset}"
+          gh release upload "${TAG}" "${asset}" --repo "${GITHUB_REPOSITORY}"
+
+      - name: Auto-merge the release PR
+        if: steps.release-please.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          PR_NUMBER: ${{ fromJSON(steps.release-please.outputs.pr).number }}
+        run: gh pr merge "${PR_NUMBER}" --auto --squash --repo "${GITHUB_REPOSITORY}"
+
+  deploy:
+    name: deploy
+    needs: release
+    # Runs after a new release, or on a manual rollback (when test and release are skipped).
+    if: >-
+      !cancelled() &&
+      (needs.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: deploy-jira-gantt-forecaster
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || needs.release.outputs.tag_name }}
+    steps:
+      - name: Download the release build
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-
-          git fetch origin --tags --force
-
-          # Highest tag that is v plus digits only (v1, v2, not v1.2.3). None yet -> v1.
-          highest=0
-          while IFS= read -r tag; do
-            if [[ "${tag}" =~ ^v([0-9]+)$ ]]; then
-              value=$((10#${BASH_REMATCH[1]}))
-              if (( value > highest )); then
-                highest=${value}
-              fi
-            fi
-          done < <(git tag --list 'v*')
-
-          release_tag="v$((highest + 1))"
-          git tag "${release_tag}" "${{ github.sha }}"
-          git push origin "${release_tag}"
-
-          if [[ -f release-asset/index.html ]]; then
-            mv release-asset/index.html jira-gantt-forecaster.html
-          elif [[ -f release-asset/dist/index.html ]]; then
-            mv release-asset/dist/index.html jira-gantt-forecaster.html
-          else
-            echo "jira-gantt-forecaster artifact did not contain index.html" >&2
-            find release-asset -type f -print >&2
+          if [[ ! "${TAG}" =~ ^v[0-9]+(\.[0-9]+\.[0-9]+)?$ ]]; then
+            echo "Not a release tag: ${TAG}" >&2
             exit 1
           fi
+          # Releases from v5.0.1 on attach jira-gantt-forecaster-<tag>.html; v1-v5 attached
+          # jira-gantt-forecaster.html.
+          gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" \
+            --pattern 'jira-gantt-forecaster*.html' --dir release-asset
+          shopt -s nullglob
+          files=(release-asset/*.html)
+          if (( ${#files[@]} != 1 )); then
+            echo "Expected one app file on release ${TAG}, found ${#files[@]}" >&2
+            exit 1
+          fi
+          mkdir site
+          mv "${files[0]}" site/index.html
 
-          gh release create "${release_tag}" jira-gantt-forecaster.html \
-            --repo "${{ github.repository }}" \
-            --title "${release_tag}" \
-            --generate-notes
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+      - name: Smoke test the live site
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          url="${PAGE_URL%/}/?smoke=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          for attempt in $(seq 1 12); do
+            status=$(curl -sS -o page.html -w '%{http_code}' "${url}" || echo 000)
+            if [[ "${status}" == 200 ]] \
+              && grep -qF '<title>Jira Gantt Forecaster</title>' page.html \
+              && grep -qF 'id="root"' page.html; then
+              # Releases from v5.0.1 on bake their version into the app; older ones show a commit.
+              if [[ ! "${TAG}" =~ \. ]] || grep -qF "${TAG} (" page.html; then
+                echo "Smoke test passed: ${url} serves ${TAG}"
+                exit 0
+              fi
+            fi
+            echo "Attempt ${attempt}: HTTP ${status}, ${TAG} not live yet. Retrying in 15s."
+            sleep 15
+          done
+          echo "Smoke test failed: ${url} did not serve ${TAG}" >&2
+          exit 1

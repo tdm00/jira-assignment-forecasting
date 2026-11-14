@@ -30,8 +30,8 @@ will start and finish.
 
 ## Using the app
 
-1. Download `index.html` from the latest CI run (artifact `jira-gantt-forecaster`) or a
-   GitHub release, or build it yourself (see below).
+1. Open <https://tdm00.github.io/jira-assignment-forecasting/>, or download the HTML from the
+   latest GitHub release, or build it yourself (see below).
 2. Open it in Chrome, Edge, Firefox or Safari.
 3. Add staff (Staff tab, or drop a staff CSV), vacations and closures.
 4. Drop your Jira CSV export. Try **Load sample data** to explore first.
@@ -114,14 +114,33 @@ npm run build && npm run test:e2e   # Playwright against file://dist/index.html
 
 Lint, format and typecheck: `npm run lint`, `npm run format:check`, `npm run typecheck`.
 
-### Continuous integration
+### Continuous integration and releases
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs lint, format check, typecheck,
-unit and integration tests with coverage, the build, and the end-to-end tests on every push
-and pull request. It uploads `dist/index.html` as the `jira-gantt-forecaster` artifact.
-A successful push to `main` publishes the next integer release (`v1`, `v2`, `v3`, …) and
-attaches that built file. Pull requests and manual runs do not tag or release. Tag pushes do
-not start CI. `dist/` is a build output and is not committed.
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) has three jobs:
+
+- **test** runs on every pull request and every push to `main`: lint, format check, typecheck,
+  unit and integration tests with coverage, the build, and the end-to-end tests. It uploads
+  `dist/index.html` as the `jira-gantt-forecaster` artifact. This is the required check on `main`.
+- **release** runs on pushes to `main`. [release-please](https://github.com/googleapis/release-please)
+  reads the conventional commits since the last release and opens or updates a release PR with
+  the next version and changelog, then turns on auto-merge for it. When that PR merges, it creates
+  the `vX.Y.Z` tag and GitHub Release and attaches the app that **test** built from that commit
+  (`jira-gantt-forecaster-vX.Y.Z.html`). It uses the `RELEASE_PLEASE_TOKEN` repo secret (a
+  fine-grained PAT), because PRs opened with the default token don't run CI.
+- **deploy** runs only when a release was created. It downloads that release's HTML (no rebuild),
+  publishes it to GitHub Pages at <https://tdm00.github.io/jira-assignment-forecasting/>, and
+  smoke-tests the live page for the new version. The Pages site is public.
+
+Pull request titles must be conventional commits (`feat:`, `fix:`, `chore:`, …): pull requests are
+squash-merged and the title becomes the commit that sets the next version. The app header shows
+the release and build commit, for example `v5.1.0 (3d3c42e5)`. Tags `v1`–`v5` came from the older
+integer scheme and are kept as they are. `dist/` is a build output and is not committed.
+
+**Rollback:** redeploy an earlier release to Pages (test and release are skipped):
+
+```bash
+gh workflow run ci.yml -f tag=vX.Y.Z
+```
 
 ## Project structure
 

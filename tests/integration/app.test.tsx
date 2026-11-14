@@ -33,7 +33,7 @@ afterEach(() => {
 describe('app version', () => {
   it('shows the build version in the header and document title', () => {
     render(<App initial={testState()} />);
-    expect(APP_VERSION).toMatch(/^[0-9a-f]{8,}$/i);
+    expect(APP_VERSION).toMatch(/^v\d+\.\d+\.\d+( \([0-9a-f]{8,}\))?$/i);
     expect(screen.getByTestId('app-version')).toHaveTextContent(APP_VERSION);
     expect(document.title).toBe(`Jira Gantt Forecaster ${APP_VERSION}`);
   });
