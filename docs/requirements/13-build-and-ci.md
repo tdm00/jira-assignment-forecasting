@@ -8,7 +8,7 @@
 
 ## Continuous integration
 
-The GitHub Actions workflow [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
+The GitHub Actions workflow [`.github/workflows/pipeline.yml`](../../.github/workflows/pipeline.yml)
 runs the **test** job on every pull request and every push to `main`. On `main`, the
 **release** job runs release-please: it keeps a release PR with the next semantic version and
 changelog up to date and auto-merges it once CI passes. Merging that PR creates the `vX.Y.Z` tag

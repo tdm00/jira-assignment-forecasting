@@ -116,7 +116,7 @@ Lint, format and typecheck: `npm run lint`, `npm run format:check`, `npm run typ
 
 ### Continuous integration and releases
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) has three jobs:
+[`.github/workflows/pipeline.yml`](.github/workflows/pipeline.yml) has three jobs:
 
 - **test** runs on every pull request and every push to `main`: lint, format check, typecheck,
   unit and integration tests with coverage, the build, and the end-to-end tests. It uploads
@@ -139,7 +139,7 @@ integer scheme and are kept as they are. `dist/` is a build output and is not co
 **Rollback:** redeploy an earlier release to Pages (test and release are skipped):
 
 ```bash
-gh workflow run ci.yml -f tag=vX.Y.Z
+gh workflow run pipeline.yml -f tag=vX.Y.Z
 ```
 
 ## Project structure
