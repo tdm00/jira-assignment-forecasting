@@ -1,4 +1,4 @@
-name: CI
+name: Pipeline
 
 # test     -> every pull request and every push to main.
 # release  -> push to main only. release-please opens or updates the release PR, or, when that
@@ -6,8 +6,8 @@ name: CI
 #             single-file app that the test job built from that same commit.
 # deploy   -> only when a release was created (or a manual rollback). Publishes the HTML attached
 #             to that release to GitHub Pages, never a fresh build, then smoke-tests the live site.
-# Rollback -> Actions > CI > Run workflow with an existing tag, or:
-#             gh workflow run ci.yml -f tag=vX.Y.Z
+# Rollback -> Actions > Pipeline > Run workflow with an existing tag, or:
+#             gh workflow run pipeline.yml -f tag=vX.Y.Z
 
 on:
   push:
