@@ -138,8 +138,17 @@ jobs:
         if: steps.release-please.outputs.pr != ''
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          PR_NUMBER: ${{ fromJSON(steps.release-please.outputs.pr).number }}
-        run: gh pr merge "${PR_NUMBER}" --auto --squash --repo "${GITHUB_REPOSITORY}"
+          # Raw JSON, parsed in the shell: step env is evaluated even when `if` skips the step,
+          # so fromJSON() on an empty output (no release PR) would fail the job.
+          PR_JSON: ${{ steps.release-please.outputs.pr }}
+        run: |
+          set -euo pipefail
+          pr_number=$(jq -r '.number // empty' <<< "${PR_JSON}")
+          if [[ -z "${pr_number}" ]]; then
+            echo "No release PR to auto-merge."
+            exit 0
+          fi
+          gh pr merge "${pr_number}" --auto --squash --repo "${GITHUB_REPOSITORY}"
 
   deploy:
     name: deploy
